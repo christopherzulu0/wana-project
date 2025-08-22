@@ -1,29 +1,50 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+"use client"
+import { Stack } from "expo-router"
+import * as SplashScreen from "expo-splash-screen"
+import { useEffect } from "react"
+import { useFonts } from "expo-font"
+import "react-native-reanimated"
+import { SafeAreaProvider } from "react-native-safe-area-context"
+import { AuthProvider } from "../hooks/AuthContext"
 
-import { useColorScheme } from '@/hooks/useColorScheme';
+SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
+  })
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync()
+    }
+  }, [loaded])
 
   if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
+    return null
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
-  );
+    <AuthProvider>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="signup" // Added signup screen
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="class/[id]" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="student/[id]" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="attendance/[classId]/[date]" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen
+            name="student-attendance/[classId]" // New route for student face scan attendance
+            options={{ headerShown: false, presentation: "card" }}
+          />
+          <Stack.Screen name="+not-found" options={{ headerShown: false }} />
+        </Stack>
+      </SafeAreaProvider>
+    </AuthProvider>
+  )
 }

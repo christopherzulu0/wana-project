@@ -1,0 +1,13 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\app",
+    "\\components",
+    "\\components\\admin-dashboard-tabs",
+    "\\constants",
+    "\\hooks",
+    "\\scripts"
+  ],
+  "SelectedNode": "\\components\\admin-dashboard-tabs\\UserManagementTab.tsx",
+  "PreviewInSolutionExplorer": false
+}
