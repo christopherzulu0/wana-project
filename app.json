@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "Iphone",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -42,7 +46,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "c9711d54-7e40-48f7-a145-45c8395188fe"
+        "projectId": "952ebe80-55a7-460e-bafb-5447a4a650ff"
       }
     }
   }
