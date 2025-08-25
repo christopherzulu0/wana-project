@@ -9,15 +9,20 @@ import type { Class } from "../../types"
 import { Button } from "../Button"
 import { EmptyState } from "../EmptyState"
 import { ClassFormModal } from "../ClassFormModal"
+import { ClassEnrollmentModal } from "../ClassEnrollmentModal"
 import { EnhancedClassCard } from "../EnhancedClassCard"
 import { useClasses } from "../../hooks/useClasses"
 import { useUsers } from "../../hooks/useUsers"
+import { useClassEnrollment } from "../../hooks/useClassEnrollment"
 
 export function ClassManagementTab() {
   const { classes, loading, error, addClass, updateClass, deleteClass, refetch } = useClasses()
   const { users } = useUsers()
+  const { enrollStudent, unenrollStudent, loading: enrollmentLoading } = useClassEnrollment()
   const [isModalVisible, setIsModalVisible] = useState(false)
+  const [isEnrollmentModalVisible, setIsEnrollmentModalVisible] = useState(false)
   const [editingClass, setEditingClass] = useState<Class | null>(null)
+  const [selectedClassForEnrollment, setSelectedClassForEnrollment] = useState<Class | null>(null)
   
   // Filter users to get only teachers
   const teachers = users.filter(user => user.role === 'teacher')
@@ -62,6 +67,19 @@ export function ClassManagementTab() {
     )
   }
 
+  const handleManageEnrollment = (classItem: Class) => {
+    setSelectedClassForEnrollment(classItem)
+    setIsEnrollmentModalVisible(true)
+  }
+
+  const handleEnrollStudent = async (classId: string, studentId: string): Promise<boolean> => {
+    return await enrollStudent(classId, studentId)
+  }
+
+  const handleUnenrollStudent = async (classId: string, studentId: string): Promise<boolean> => {
+    return await unenrollStudent(classId, studentId)
+  }
+
   const handleSaveClass = async (classData: Omit<Class, "id" | "totalStudents" | "teacherName">) => {
     try {
       if (editingClass) {
@@ -93,7 +111,13 @@ export function ClassManagementTab() {
   }
 
   const renderClassItem = ({ item }: { item: Class }) => (
-    <EnhancedClassCard classItem={item} onEdit={handleEditClass} onDelete={handleDeleteClass} showActions={true} />
+    <EnhancedClassCard 
+      classItem={item} 
+      onEdit={handleEditClass} 
+      onDelete={handleDeleteClass} 
+      onManageEnrollment={handleManageEnrollment}
+      showActions={true} 
+    />
   )
 
   const renderEmptyComponent = () => (
@@ -151,6 +175,18 @@ export function ClassManagementTab() {
         onSave={handleSaveClass}
         initialData={editingClass}
         teachers={teachers}
+      />
+
+      <ClassEnrollmentModal
+        visible={isEnrollmentModalVisible}
+        classItem={selectedClassForEnrollment}
+        onClose={() => {
+          setIsEnrollmentModalVisible(false)
+          setSelectedClassForEnrollment(null)
+        }}
+        onEnrollStudent={handleEnrollStudent}
+        onUnenrollStudent={handleUnenrollStudent}
+        loading={enrollmentLoading}
       />
     </View>
   )

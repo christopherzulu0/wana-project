@@ -233,8 +233,10 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     marginBottom: spacing.md,
+    gap: spacing.sm,
   },
   classSelector: {
     marginBottom: spacing.xl,
@@ -269,10 +271,14 @@ const styles = StyleSheet.create({
   },
   actionsGrid: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
+    gap: spacing.sm,
   },
   actionCard: {
-    width: "48%",
+    flex: 1,
+    minWidth: 150,
+    maxWidth: "48%",
     backgroundColor: colors.card,
     borderRadius: spacing.md,
     padding: spacing.md,

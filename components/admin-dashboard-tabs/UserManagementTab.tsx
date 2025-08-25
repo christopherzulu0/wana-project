@@ -1,5 +1,6 @@
 ﻿"use client"
 
+import { Feather } from "@expo/vector-icons"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
     Alert,
@@ -8,23 +9,22 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
+    useWindowDimensions
 } from "react-native"
-import { Feather } from "@expo/vector-icons"
 import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
+import { useClasses } from "../../hooks/useClasses"
+import { useUsers } from "../../hooks/useUsers"
 import type { Class, User } from "../../types"
+import { mockClasses, updateMockClass } from "../../utils/mockData"
+import { Avatar } from "../Avatar"
 import { Button } from "../Button"
 import { Card } from "../Card"
 import { EmptyState } from "../EmptyState"
 import { Input } from "../Input"
-import { Avatar } from "../Avatar"
-import { useUsers } from "../../hooks/useUsers"
-import { useClasses } from "../../hooks/useClasses"
-import { mockClasses, updateMockClass } from "../../utils/mockData"
 import { UserFormModal } from "../UserFormModal"
 
 type Role = "teacher" | "admin" | "student"
@@ -33,6 +33,7 @@ type SortKey = "name" | "email" | "role"
 type SortDir = "asc" | "desc"
 
 export function UserManagementTab() {
+    const { width } = useWindowDimensions()
     const { users, loading, error, addUser, updateUser, deleteUser, refetch } = useUsers()
     const { getAllClasses } = useClasses()
     const classes = getAllClasses()
@@ -66,7 +67,7 @@ export function UserManagementTab() {
     const [bulkClassIds, setBulkClassIds] = useState<string[]>([])
 
     // Debounce search
-    const timerRef = useRef<NodeJS.Timeout | null>(null)
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => {
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => setQ(search.trim().toLowerCase()), 220)
@@ -348,7 +349,7 @@ export function UserManagementTab() {
                     onPress={() => toggleSelect(item.id)}
                     style={styles.checkbox}
                     accessibilityLabel={isSelected ? "Deselect user" : "Select user"}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    hitSlop={{ top: 5, bottom: 1, left: 8, right: 8 }}
                 >
                     <Feather
                         name={isSelected ? "check-square" : "square"}
@@ -400,7 +401,6 @@ export function UserManagementTab() {
                 style={styles.statsScrollView}
                 bounces={false}
                 decelerationRate="fast"
-                clipsToBounds={false}
             >
                 <StatChip icon="users" label="All" value={stats.total} active={roleFilter === "all"} onPress={() => setRoleFilter("all")} />
                 <StatChip icon="briefcase" label="Teachers" value={stats.teachers} active={roleFilter === "teacher"} onPress={() => setRoleFilter("teacher")} />
@@ -459,28 +459,30 @@ export function UserManagementTab() {
                         </TouchableOpacity>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bulkActions}>
-                        <Button title="Set Role" onPress={() => setIsBulkRoleModalOpen(true)} variant="secondary" size="small" />
+                        <Button title="Set Role" onPress={() => setIsBulkRoleModalOpen(true)}  size="small" />
                         <Button title="Assign Classes" onPress={() => setIsBulkAssignModalOpen(true)} variant="secondary" size="small" />
                         <Button title="Unassign" onPress={applyBulkUnassignTeacherClasses} variant="secondary" size="small" />
-                        <Button title="Delete" onPress={bulkDelete} variant="destructive" size="small" />
+                        <Button title="Delete" onPress={bulkDelete} variant="outline" size="small" />
                     </ScrollView>
                 </Card>
             )}
 
             {/* Assign Panel (single user) */}
-            <Card style={styles.assignPanel}>
+            <Card style={width < 420 ? [styles.assignPanel, styles.assignPanelCompact] : styles.assignPanel}>
                 <Text style={styles.panelTitle}>Assign Roles & Classes</Text>
                 {!selectedUser ? (
-                    <EmptyState
-                        title="No user selected"
-                        message="Select a user from the list to manage their role and class assignments."
-                        icon="users"
-                    />
+                    <View style={styles.emptyStateWrap}>
+                        <EmptyState
+                            title="No user selected"
+                            message="Select a user from the list to manage their role and class assignments."
+                            icon="users"
+                        />
+                    </View>
                 ) : (
-                    <View style={styles.panelContent}>
-                        <View style={styles.personHeader}>
-                            <Avatar source={selectedUser.avatar} name={selectedUser.name} size={56} />
-                            <View style={styles.personInfo}>
+                    <View style={[styles.panelContent, width < 420 && styles.panelContentCompact]}>
+                        <View style={[styles.personHeader, width < 420 && styles.personHeaderCompact]}>
+                            <Avatar source={selectedUser.avatar} name={selectedUser.name} size={width < 420 ? 44 : 56} />
+                            <View style={[styles.personInfo, width < 420 && styles.personInfoCompact]}>
                                 <Text numberOfLines={2} style={styles.personName}>{selectedUser.name}</Text>
                                 <Text numberOfLines={2} style={styles.personEmail}>{selectedUser.email}</Text>
                                 <View style={{ marginTop: spacing.xs }}>
@@ -494,7 +496,7 @@ export function UserManagementTab() {
 
                         {/* Role Selector */}
                         <Text style={styles.sectionLabel}>Role</Text>
-                        <View style={styles.roleRow}>
+                        <View style={[styles.roleRow, width < 420 && styles.wrapRow]}>
                             {(["teacher", "admin", "student"] as Role[]).map((role) => {
                                 const active = selectedRole === role
                                 return (
@@ -512,6 +514,7 @@ export function UserManagementTab() {
                                                         : "user"
                                             }
                                             size={18}
+                                          
                                             color={active ? colors.card : colors.text}
                                         />
                                         <Text
@@ -860,7 +863,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 24,
         fontFamily: fonts.bold,
-        fontWeight: fonts.weights.bold,
+        fontWeight: Number(fonts.weights.bold) as any,
         color: colors.text,
     },
     statsScrollView: {
@@ -881,6 +884,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingHorizontal: spacing.sm,
         paddingVertical: spacing.sm,
+        marginVertical:50,
         backgroundColor: colors.card,
         borderRadius: 20,
         borderWidth: 1,
@@ -908,7 +912,7 @@ const styles = StyleSheet.create({
     statChipLabel: {
         fontSize: 14,
         fontFamily: fonts.medium,
-        fontWeight: fonts.weights.medium,
+        fontWeight: Number(fonts.weights.medium) as any,
         color: colors.text,
     },
     statChipLabelActive: {
@@ -917,7 +921,7 @@ const styles = StyleSheet.create({
     statChipValue: {
         fontSize: 14,
         fontFamily: fonts.bold,
-        fontWeight: fonts.weights.bold,
+        fontWeight: Number(fonts.weights.bold) as any,
         color: colors.text,
     },
     statChipValueActive: {
@@ -963,7 +967,7 @@ const styles = StyleSheet.create({
     sortChipText: {
         fontSize: 14,
         fontFamily: fonts.medium,
-        fontWeight: fonts.weights.medium,
+        fontWeight: Number(fonts.weights.medium) as any,
         color: colors.text,
     },
     sortChipTextActive: {
@@ -986,7 +990,7 @@ const styles = StyleSheet.create({
     bulkText: {
         fontSize: 14,
         fontFamily: fonts.medium,
-        fontWeight: fonts.weights.medium,
+        fontWeight: Number(fonts.weights.medium) as any,
         color: colors.text,
     },
     bulkLink: {
@@ -1010,14 +1014,23 @@ const styles = StyleSheet.create({
         padding: spacing.lg,
         minHeight: 200,
     },
+    assignPanelCompact: {
+        padding: spacing.md,
+    },
     panelTitle: {
         fontSize: 18,
         fontFamily: fonts.bold,
         color: colors.text,
-        marginBottom: spacing.md,
+        marginBottom: spacing.lg,
+    },
+    emptyStateWrap: {
+        paddingTop: spacing.sm,
     },
     panelContent: {
         gap: spacing.lg,
+    },
+    panelContentCompact: {
+        gap: spacing.md,
     },
     personHeader: {
         flexDirection: "row",
@@ -1025,10 +1038,18 @@ const styles = StyleSheet.create({
         flexWrap: "wrap",
         minHeight: 60,
     },
+    personHeaderCompact: {
+        alignItems: 'flex-start',
+        gap: spacing.sm,
+    },
     personInfo: {
         marginLeft: spacing.md,
         flex: 1,
         minWidth: 200,
+    },
+    personInfoCompact: {
+        marginLeft: spacing.sm,
+        minWidth: 0,
     },
     personName: {
         fontSize: 16,
@@ -1060,6 +1081,9 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         flexWrap: "wrap",
         alignItems: "center",
+    },
+    wrapRow: {
+        flexWrap: 'wrap',
     },
     roleChip: {
         flexDirection: "row",

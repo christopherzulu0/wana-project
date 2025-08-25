@@ -10,12 +10,20 @@ export interface User {
 export interface Student {
   id: string
   name: string
-  rollNumber: string
-  avatar?: string
   email?: string
+  registrationNumber?: string
+  userId?: string
+  userEmail?: string
+  hasAccount: boolean
+  password?: string // Store the generated password for admin reference
+  enrolledClassesCount?: number
+  createdAt: Date
+  avatar?: string
   phone?: string
-  class: Class
-  classId: string
+  // Legacy fields for backward compatibility
+  rollNumber?: string
+  class?: Class
+  classId?: string
 }
 
 export interface Class {

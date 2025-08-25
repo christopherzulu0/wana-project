@@ -1,26 +1,26 @@
 "use client"
 
+import { Feather } from "@expo/vector-icons"
 import React from "react"
 import {
+    ScrollView,
     StyleSheet,
     Text,
-    View,
-    ScrollView,
+    TextStyle,
     TouchableOpacity,
     useWindowDimensions,
+    View,
     ViewStyle,
-    TextStyle,
 } from "react-native"
-import { Feather } from "@expo/vector-icons"
 import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
 import { useAuth } from "../../hooks/useAuth"
-import { StatCard } from "../StatCard"
-import { mockUsers, mockClasses, mockStudents } from "../../utils/mockData"
-import { AttendanceChart } from "../AttendanceChart"
 import type { AttendanceStats } from "../../types"
+import { mockClasses, mockStudents, mockUsers } from "../../utils/mockData"
+import { AttendanceChart } from "../AttendanceChart"
 import { Button } from "../Button"
+import { StatCard } from "../StatCard"
 
 export function AdminOverviewTab() {
     const { width } = useWindowDimensions()
@@ -84,7 +84,18 @@ export function AdminOverviewTab() {
             showsVerticalScrollIndicator={false}
         >
             {/* Header */}
-            <View style={[styles.headerBlock, { padding: spacing.lg }]}>
+            <View
+                style={[
+                    styles.headerBlock,
+                    {
+                        padding: spacing.lg,
+                        flexDirection: width < 480 ? 'column' : 'row',
+                        alignItems: width < 480 ? 'flex-start' : 'center',
+                        justifyContent: 'space-between',
+                        gap: width < 480 ? spacing.md : 0,
+                    },
+                ]}
+            >
                 <View style={styles.headerLeft}>
                     <View style={styles.headerTitleRow}>
                         <Text style={styles.greeting} numberOfLines={2} accessibilityRole="header">
@@ -100,9 +111,14 @@ export function AdminOverviewTab() {
                     </Text>
                 </View>
 
-                <View style={styles.headerRight}>
+                <View style={[styles.headerRight, width < 480 && { width: '100%', justifyContent: 'flex-start' }]}>
                     <HeaderPill icon="calendar" label="Today" value={formatDate(new Date())} />
-                    <HeaderPill icon="activity" label="Active" value={`${activeStudentsToday}`} />
+                    <HeaderPill 
+                    icon="activity" 
+                    label="Active" 
+                    value={`${activeStudentsToday}`}
+                    
+                    />
                 </View>
             </View>
 
@@ -142,7 +158,7 @@ export function AdminOverviewTab() {
 
             {/* KPI Highlights - horizontal scroll to avoid wrapping on phones */}
             <View style={styles.section}>
-                <SectionHeader title="Today’s Highlights" />
+                <SectionHeader title="Today's Highlights" />
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -197,7 +213,7 @@ export function AdminOverviewTab() {
                             title="View Reports"
                             variant="outline"
                             onPress={() => console.log("Navigate to Reports")}
-                            style={[styles.attendanceCta, { marginRight: spacing.sm }]}
+                            style={{ ...styles.attendanceCta, marginRight: spacing.sm } as any}
                         />
                         <Button
                             title="Export CSV"
@@ -399,7 +415,7 @@ const styles = StyleSheet.create({
     greeting: {
         fontSize: fonts.sizes.xl,
         fontFamily: fonts.regular,
-        fontWeight: fonts.weights.bold,
+        fontWeight: Number(fonts.weights.bold) as any,
         color: colors.text,
     },
     roleBadge: {
@@ -428,6 +444,7 @@ const styles = StyleSheet.create({
         marginTop: spacing.md,
         flexDirection: "row",
         gap: spacing.xs,
+        flexWrap: 'wrap',
     },
     headerPill: {
         flexDirection: "row",
@@ -441,19 +458,24 @@ const styles = StyleSheet.create({
         borderColor: colors.borderLight,
         minWidth: 140,
         flexGrow: 0,
+        overflow: 'hidden',
     },
     headerPillLabel: {
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
         color: colors.textLight,
+        flexShrink: 1,
+        minWidth: 0,
     },
     headerPillValue: {
         marginLeft: "auto",
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
         color: colors.text,
-        fontWeight: fonts.weights.semibold,
+        fontWeight: Number(fonts.weights.semibold) as any,
         maxWidth: "50%",
+        flexShrink: 1,
+        minWidth: 0,
     },
 
     // Sections
@@ -469,7 +491,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: fonts.sizes.lg,
         fontFamily: fonts.regular,
-        fontWeight: fonts.weights.semibold,
+        fontWeight: Number(fonts.weights.semibold) as any,
         color: colors.text,
     },
     sectionRule: {
@@ -480,7 +502,7 @@ const styles = StyleSheet.create({
     linkText: {
         color: colors.primary,
         fontFamily: fonts.regular,
-        fontWeight: fonts.weights.medium,
+        fontWeight: Number(fonts.weights.medium) as any,
     },
 
     // Grid rows and cells (mobile-first)
@@ -521,7 +543,7 @@ const styles = StyleSheet.create({
     kpiValue: {
         fontSize: fonts.sizes.xl,
         fontFamily: fonts.regular,
-        fontWeight: fonts.weights.bold,
+        fontWeight: Number(fonts.weights.bold) as any,
     },
     kpiChip: {
         paddingHorizontal: spacing.sm,
@@ -556,7 +578,7 @@ const styles = StyleSheet.create({
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
         color: colors.text,
-        fontWeight: fonts.weights.semibold,
+        fontWeight: Number(fonts.weights.semibold) as any,
         textAlign: "center",
     },
 

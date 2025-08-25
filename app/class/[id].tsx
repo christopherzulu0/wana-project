@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "../../components/Button";
@@ -24,16 +24,28 @@ export default function ClassDetailsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { getClass } = useClasses();
-  const { getStudentsByClassId } = useStudents();
+  const { fetchStudentsByClassId } = useStudents();
   const { getClassAttendanceByDate, getAttendanceStats, markAttendance, getStudentAttendance } = useAttendance();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [students, setStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(true);
   
   // Get class details
   const classItem = getClass(id);
   
-  // Get students in this class
-  const students = getStudentsByClassId(id);
+  // Fetch students in this class
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (id) {
+        setLoadingStudents(true);
+        const classStudents = await fetchStudentsByClassId(id);
+        setStudents(classStudents || []);
+        setLoadingStudents(false);
+      }
+    };
+    fetchStudents();
+  }, [id]);
   
   // Get attendance records for this date
   const dateString = selectedDate.toISOString().split("T")[0];
@@ -138,7 +150,13 @@ export default function ClassDetailsScreen() {
         <View style={styles.studentsSection}>
           <Text style={styles.sectionTitle}>Students ({students.length})</Text>
           
-          {students.length === 0 ? (
+          {loadingStudents ? (
+            <EmptyState
+              title="Loading Students"
+              message="Please wait while we load the student list..."
+              icon="loader"
+            />
+          ) : !students || students.length === 0 ? (
             <EmptyState
               title="No Students"
               message="There are no students in this class yet."

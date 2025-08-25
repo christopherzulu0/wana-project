@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import type { Class } from "../types"
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://attendance-records-wana-f9it.vercel.app'
+const API_BASE_URL =  'https://attendance-records-wana.vercel.app'
 
 interface ApiResponse<T> {
   success: boolean

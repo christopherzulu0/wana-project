@@ -13,10 +13,11 @@ interface EnhancedClassCardProps {
   classItem: Class
   onEdit?: (classItem: Class) => void
   onDelete?: (classItem: Class) => void
+  onManageEnrollment?: (classItem: Class) => void
   showActions?: boolean
 }
 
-export const EnhancedClassCard = ({ classItem, onEdit, onDelete, showActions = false }: EnhancedClassCardProps) => {
+export const EnhancedClassCard = ({ classItem, onEdit, onDelete, onManageEnrollment, showActions = false }: EnhancedClassCardProps) => {
   const router = useRouter()
 
   const handlePress = () => {
@@ -41,6 +42,11 @@ export const EnhancedClassCard = ({ classItem, onEdit, onDelete, showActions = f
           </View>
           {showActions ? (
             <View style={styles.actions}>
+              {onManageEnrollment && (
+                <TouchableOpacity onPress={() => onManageEnrollment(classItem)} style={styles.actionButton}>
+                  <Feather name="users" size={20} color={colors.secondary} />
+                </TouchableOpacity>
+              )}
               {onEdit && (
                 <TouchableOpacity onPress={() => onEdit(classItem)} style={styles.actionButton}>
                   <Feather name="edit" size={20} color={colors.primary} />

@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { colors } from "../constants/Colors";
 import { fonts } from "../constants/fonts";
 import { spacing } from "../constants/spacing";
@@ -21,10 +21,16 @@ export const EmptyState = ({
   actionLabel,
   onAction,
 }: EmptyStateProps) => {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 420;
+  const circleSize = isCompact ? 64 : 80;
+  const iconSize = isCompact ? 36 : 48;
+  const containerPadding = isCompact ? spacing.lg : spacing.xl;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.iconContainer}>
-        <Feather name={icon} size={48} color={colors.textLight} />
+    <View style={[styles.container, { padding: containerPadding }]}>
+      <View style={[styles.iconContainer, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
+        <Feather name={icon} size={iconSize} color={colors.textLight} />
       </View>
       
       <Text style={styles.title}>{title}</Text>
@@ -44,9 +50,9 @@ export const EmptyState = ({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    width: '100%',
     padding: spacing.xl,
   },
   iconContainer: {
@@ -61,7 +67,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fonts.sizes.lg,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.bold,
+    fontWeight: Number(fonts.weights.bold) as any,
     color: colors.text,
     textAlign: "center",
     marginBottom: spacing.sm,

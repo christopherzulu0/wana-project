@@ -1,22 +1,24 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { SafeAreaView, StyleSheet, useWindowDimensions } from "react-native"
-import { TabView, SceneMap, TabBar } from "react-native-tab-view"
+import { useCallback, useState } from "react"
+import { SafeAreaView, StyleSheet, Text, TextStyle, useWindowDimensions, ViewStyle } from "react-native"
+import { SceneMap, TabBar, TabView } from "react-native-tab-view"
+import { Header } from "../components/Header"
 import { StatusBar } from "../components/StatusBar"
+import { AdminOverviewTab } from "../components/admin-dashboard-tabs/AdminOverviewTab"
+import { AdminProfileTab } from "../components/admin-dashboard-tabs/AdminProfileTab"
+import { AdminReportsTab } from "../components/admin-dashboard-tabs/AdminReportsTab"
+import { ClassManagementTab } from "../components/admin-dashboard-tabs/ClassManagementTab"
+import { StudentManagementTab } from "../components/admin-dashboard-tabs/StudentManagementTab"
+import { UserManagementTab } from "../components/admin-dashboard-tabs/UserManagementTab"
 import { colors } from "../constants/Colors"
 import { fonts } from "../constants/fonts"
-import { Header } from "../components/Header"
-import { AdminOverviewTab } from "../components/admin-dashboard-tabs/AdminOverviewTab"
-import { UserManagementTab } from "../components/admin-dashboard-tabs/UserManagementTab"
-import { ClassManagementTab } from "../components/admin-dashboard-tabs/ClassManagementTab"
-import { AdminReportsTab } from "../components/admin-dashboard-tabs/AdminReportsTab"
-import { AdminProfileTab } from "../components/admin-dashboard-tabs/AdminProfileTab"
 
 const renderScene = SceneMap({
   overview: AdminOverviewTab,
   users: UserManagementTab,
   classes: ClassManagementTab,
+  students: StudentManagementTab,
   reports: AdminReportsTab,
   profile: AdminProfileTab,
 })
@@ -29,6 +31,7 @@ export default function AdminDashboard() {
     { key: "overview", title: "Overview" },
     { key: "users", title: "Users" },
     { key: "classes", title: "Classes" },
+    { key: "students", title: "Students" },
     { key: "reports", title: "Reports" },
     { key: "profile", title: "Profile" },
   ])
@@ -43,10 +46,23 @@ export default function AdminDashboard() {
       {...props}
       indicatorStyle={styles.tabBarIndicator}
       style={styles.tabBar}
-      labelStyle={styles.tabBarLabel}
       activeColor={colors.primary}
       inactiveColor={colors.textLight}
       pressColor={colors.primary + "10"}
+      scrollEnabled
+      renderLabel={({ route, focused, color }: { route: { key: string; title: string }; focused: boolean; color: string }) => (
+        <Text
+          style={[
+            styles.tabBarLabel,
+            { color, opacity: focused ? 1 : 0.8 },
+          ]}
+          numberOfLines={1}
+        >
+          {route.title}
+        </Text>
+      )}
+      tabStyle={{ width: 'auto', paddingHorizontal: 12 }}
+      contentContainerStyle={{ paddingHorizontal: 8 }}
     />
   )
 
@@ -61,13 +77,21 @@ export default function AdminDashboard() {
         initialLayout={{ width: layout.width }}
         renderTabBar={renderTabBar}
         tabBarPosition="bottom"
+        lazy
+        swipeEnabled
         style={styles.tabView}
       />
     </SafeAreaView>
   )
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<{
+  container: ViewStyle
+  tabView: ViewStyle
+  tabBar: ViewStyle
+  tabBarIndicator: ViewStyle
+  tabBarLabel: TextStyle
+}>({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -89,7 +113,7 @@ const styles = StyleSheet.create({
   tabBarLabel: {
     fontFamily: fonts.regular,
     fontSize: fonts.sizes.sm,
-    fontWeight: fonts.weights.semibold,
+    fontWeight: Number(fonts.weights.semibold) as unknown as TextStyle['fontWeight'],
     textTransform: 'none', // Prevent automatic uppercase
   },
 })

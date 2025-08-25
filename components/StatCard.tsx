@@ -97,6 +97,8 @@ const styles = StyleSheet.create({
         ...cardBase,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
+        flex: 1,
+        minWidth: 140,
     },
     row: {
         flexDirection: "row",

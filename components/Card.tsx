@@ -1,11 +1,11 @@
 import React from "react";
-import { StyleSheet, View, ViewStyle } from "react-native";
+import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { colors } from "../constants/Colors";
 import { spacing } from "../constants/spacing";
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   variant?: "default" | "outlined" | "elevated";
 }
 

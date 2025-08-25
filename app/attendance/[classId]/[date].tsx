@@ -41,11 +41,11 @@ export default function AttendanceSheetScreen() {
     present: attendanceRecords.filter(record => record.status === "present").length,
     absent: attendanceRecords.filter(record => record.status === "absent").length,
     late: attendanceRecords.filter(record => record.status === "late").length,
-    total: students.length,
+    total: students?.length || 0,
   };
   
   // Filter students based on attendance status
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = (students || []).filter(student => {
     if (filterStatus === "all") return true;
     
     const record = getStudentAttendance(student.id, date);
@@ -59,7 +59,7 @@ export default function AttendanceSheetScreen() {
   };
   
   const handleMarkAllPresent = () => {
-    if (user) {
+    if (user && students) {
       students.forEach(student => {
         markAttendance(student, "present", date, user.id);
       });
