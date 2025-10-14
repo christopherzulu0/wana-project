@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './useAuth'
 
-const API_BASE_URL =  'https://attendance-records-wana.vercel.app'
+const API_BASE_URL = 'http://10.59.131.203:3000'
 
 interface Class {
   id: string
@@ -37,7 +37,7 @@ export function useStudentEnrollment() {
   const [error, setError] = useState<string | null>(null)
 
   // Fetch student's enrolled classes
-  const fetchEnrolledClasses = async () => {
+  const fetchEnrolledClasses = useCallback(async () => {
     if (!user?.id) return
     
     // Check if user has student role
@@ -84,10 +84,10 @@ export function useStudentEnrollment() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, user?.role])
 
   // Fetch all available classes
-  const fetchAvailableClasses = async () => {
+  const fetchAvailableClasses = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -106,7 +106,7 @@ export function useStudentEnrollment() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   // Enroll in a class
   const enrollInClass = async (classId: string): Promise<boolean> => {
@@ -252,7 +252,7 @@ export function useStudentEnrollment() {
       fetchEnrolledClasses()
       fetchAvailableClasses()
     }
-  }, [user?.id])
+  }, [user?.id, fetchEnrolledClasses, fetchAvailableClasses])
 
   return {
     enrolledClasses,

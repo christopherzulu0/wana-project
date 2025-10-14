@@ -42,6 +42,10 @@ export default function RootLayout() {
             name="student-attendance/[classId]" // New route for student face scan attendance
             options={{ headerShown: false, presentation: "card" }}
           />
+          <Stack.Screen
+            name="student-dashboard"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen name="+not-found" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaProvider>

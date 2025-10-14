@@ -11,11 +11,14 @@ import { EmptyState } from "../EmptyState"
 import { Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { useState } from "react"
+import { ClassFaceScanModal } from "../ClassFaceScanModal"
 
 export function StudentClassesTab() {
   const { user } = useAuth()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'enrolled' | 'available'>('enrolled')
+  const [showFaceScanModal, setShowFaceScanModal] = useState(false)
+  const [selectedClass, setSelectedClass] = useState<any>(null)
   const {
     enrolledClasses,
     availableClasses,
@@ -70,13 +73,27 @@ export function StudentClassesTab() {
     )
   }
 
+  const handleMarkAttendance = (classItem: any) => {
+    setSelectedClass(classItem)
+    setShowFaceScanModal(true)
+  }
+
+  const handleFaceScanSuccess = () => {
+    Alert.alert('Success', `Attendance marked successfully for ${selectedClass?.name}!`)
+  }
+
+  const handleFaceScanClose = () => {
+    setShowFaceScanModal(false)
+    setSelectedClass(null)
+  }
+
   const renderEnrolledClassItem = ({ item }: { item: any }) => (
     <View>
       <ClassCard classItem={item} />
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={styles.markAttendanceButton}
-          onPress={() => router.push(`/student-attendance/${item.id}`)}
+          onPress={() => handleMarkAttendance(item)}
         >
           <Feather name="camera" size={20} color={colors.card} />
           <Text style={styles.markAttendanceButtonText}>Mark Attendance</Text>
@@ -172,6 +189,16 @@ export function StudentClassesTab() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={emptyComponent}
       />
+
+      {/* Face Scan Modal */}
+      {selectedClass && (
+        <ClassFaceScanModal
+          visible={showFaceScanModal}
+          classItem={selectedClass}
+          onClose={handleFaceScanClose}
+          onSuccess={handleFaceScanSuccess}
+        />
+      )}
     </View>
   )
 }
@@ -239,7 +266,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: -spacing.xsm,
+    marginTop: -spacing.xs,
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
     gap: spacing.sm,
@@ -297,7 +324,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     borderRadius: spacing.md,
     paddingVertical: spacing.md,
-    marginTop: -spacing.xsm,
+    marginTop: -spacing.xs,
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
     minWidth: 120,

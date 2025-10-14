@@ -11,14 +11,12 @@ import { StudentOverviewTab } from "../components/student-dashboard-tabs/Student
 import { StudentClassesTab } from "../components/student-dashboard-tabs/StudentClassesTab"
 import { StudentAttendanceHistoryTab } from "../components/student-dashboard-tabs/StudentAttendanceHistoryTab"
 import { StudentProfileTab } from "../components/student-dashboard-tabs/StudentProfileTab"
-// Removed StudentFaceScanTab import as it's no longer a direct tab
 
 const renderScene = SceneMap({
   overview: StudentOverviewTab,
   myClasses: StudentClassesTab,
   attendanceHistory: StudentAttendanceHistoryTab,
   profile: StudentProfileTab,
-  // Removed faceScan from scene map
 })
 
 export default function StudentDashboard() {
@@ -30,7 +28,6 @@ export default function StudentDashboard() {
     { key: "myClasses", title: "My Classes" },
     { key: "attendanceHistory", title: "Attendance" },
     { key: "profile", title: "Profile" },
-    // Removed faceScan route
   ])
 
   const renderTabBar = (props: any) => (

@@ -20,6 +20,8 @@ export interface Student {
   createdAt: Date
   avatar?: string
   phone?: string
+  faceEncoding?: string // Stored face encoding for recognition
+  faceEnrolled?: boolean // Whether student has enrolled their face
   // Legacy fields for backward compatibility
   rollNumber?: string
   class?: Class
@@ -45,6 +47,7 @@ export interface AttendanceRecord {
   classId: string
   date: string
   status: "present" | "absent" | "late"
+  method?: "manual" | "face_recognition"
   markedBy: string
   markedAt: string
 }

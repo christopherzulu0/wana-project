@@ -1,17 +1,29 @@
 "use client"
 
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert } from "react-native"
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Modal } from "react-native"
+import { useState } from "react"
 import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
 import { useAuth } from "../../hooks/useAuth"
+import { useFaceEnrollment } from "../../hooks/useFaceEnrollment"
 import { Avatar } from "../Avatar"
 import { Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import { FaceEnrollment } from "../FaceEnrollment"
+import { Card } from "../Card"
+import { mockStudents } from "../../utils/mockData"
 
 export function StudentProfileTab() {
   const { user, logout } = useAuth()
+  const { enrollFace, getFaceStatus, loading: faceLoading } = useFaceEnrollment()
   const router = useRouter()
+  
+  const [showFaceEnrollment, setShowFaceEnrollment] = useState(false)
+  const [faceEnrolled, setFaceEnrolled] = useState(false)
+  
+  // Find the logged-in student
+  const student = mockStudents.find((s) => s.id === user?.id) || mockStudents[0]
 
   const handleLogout = () => {
     Alert.alert(
@@ -29,6 +41,25 @@ export function StudentProfileTab() {
         },
       ]
     )
+  }
+
+  const handleFaceEnrollmentComplete = async (base64Image: string) => {
+    try {
+      // base64Image is now the actual image, not an encoding
+      // Send it to backend which will use Python for real face recognition
+      const success = await enrollFace(student.id, base64Image)
+      if (success) {
+        setFaceEnrolled(true)
+        setShowFaceEnrollment(false)
+      }
+    } catch (error) {
+      console.error('Error saving face encoding:', error)
+      Alert.alert('Error', 'Failed to save face enrollment. Please try again.')
+    }
+  }
+
+  const handleFaceEnrollmentCancel = () => {
+    setShowFaceEnrollment(false)
   }
 
   const profileItems = [
@@ -55,6 +86,25 @@ export function StudentProfileTab() {
   ]
 
   const actionItems = [
+    {
+      icon: faceEnrolled ? 'check-circle' as const : 'camera' as const,
+      label: faceEnrolled ? 'Face Enrolled' : 'Enroll Face for Attendance',
+      onPress: () => {
+        if (faceEnrolled) {
+          Alert.alert(
+            'Face Already Enrolled',
+            'You have already enrolled your face for attendance recognition. Would you like to re-enroll?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Re-enroll', onPress: () => setShowFaceEnrollment(true) }
+            ]
+          )
+        } else {
+          setShowFaceEnrollment(true)
+        }
+      },
+      color: faceEnrolled ? colors.success : colors.primary,
+    },
     {
       icon: 'edit' as const,
       label: 'Edit Profile',
@@ -135,6 +185,18 @@ export function StudentProfileTab() {
           <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Face Enrollment Modal */}
+      <Modal
+        visible={showFaceEnrollment}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <FaceEnrollment
+          onComplete={handleFaceEnrollmentComplete}
+          onCancel={handleFaceEnrollmentCancel}
+        />
+      </Modal>
     </ScrollView>
   )
 }

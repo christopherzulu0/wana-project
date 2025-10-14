@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import type { User } from "../types"
 
-const API_BASE_URL = 'https://attendance-records-wana.vercel.app'
+const API_BASE_URL = 'http://10.59.131.203:3000';
 
 interface ApiResponse<T> {
   success: boolean

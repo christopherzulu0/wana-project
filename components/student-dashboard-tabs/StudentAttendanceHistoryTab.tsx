@@ -1,6 +1,6 @@
 "use client"
 
-import { StyleSheet, View, ScrollView, Text, TouchableOpacity } from "react-native"
+import { StyleSheet, View, ScrollView, Text, TouchableOpacity, ActivityIndicator } from "react-native"
 import { colors } from "../../constants/Colors"
 import { spacing } from "../../constants/spacing"
 import { Card } from "../Card"
@@ -16,7 +16,9 @@ import { formatDate } from "../../utils/dateUtils"
 import { AttendanceChart } from "../AttendanceChart"
 import { EmptyState } from "../EmptyState"
 import { Feather } from "@expo/vector-icons"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
+
+const API_BASE_URL = 'http://10.47.117.203:3000'
 
 type FilterStatus = "all" | "present" | "absent" | "late"
 type SortColumn = "date" | "status"
@@ -43,8 +45,11 @@ const years = Array.from({ length: 5 }, (_, i) => currentYear - i) // Last 5 yea
 export function StudentAttendanceHistoryTab() {
   const { user } = useAuth()
 
-  // Assuming the logged-in user is a student, we'll use a mock student for now
-  const student = mockStudents.find((s) => s.id === user?.id) || mockStudents[0] // Fallback to first mock student
+  // Memoize student to prevent infinite re-renders
+  const student = useMemo(
+    () => mockStudents.find((s) => s.id === user?.id) || mockStudents[0],
+    [user?.id]
+  )
 
   // State for month and year selection
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()) // 0-indexed
@@ -59,17 +64,62 @@ export function StudentAttendanceHistoryTab() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
+  // State for API data
+  const [attendanceData, setAttendanceData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Wrap fetchAttendanceHistory in useCallback to prevent infinite re-renders
+  const fetchAttendanceHistory = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const url = `${API_BASE_URL}/api/students/${student.id}/attendance?month=${selectedMonth + 1}&year=${selectedYear}`
+      console.log('Fetching attendance from:', url)
+
+      const response = await fetch(url)
+      
+      console.log('Response status:', response.status)
+      console.log('Response ok:', response.ok)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Attendance data received:', data.attendance?.length || 0, 'records')
+        setAttendanceData(data.attendance || [])
+      } else {
+        // Fallback to mock data if API fails
+        console.log('API returned error status, using mock data')
+        setAttendanceData(getStudentAttendanceHistoryByMonthAndYear(student.id, selectedMonth, selectedYear))
+      }
+    } catch (err) {
+      console.error('Error fetching attendance:', err)
+      console.log('Using mock data due to error')
+      // Fallback to mock data
+      setAttendanceData(getStudentAttendanceHistoryByMonthAndYear(student.id, selectedMonth, selectedYear))
+    } finally {
+      setLoading(false)
+    }
+  }, [student.id, selectedMonth, selectedYear])
+
+  // Fetch attendance data from API
+  useEffect(() => {
+    fetchAttendanceHistory()
+  }, [fetchAttendanceHistory])
+
   // Get attendance history for the selected month and year
   const monthlyAttendanceHistory = useMemo(
-    () => getStudentAttendanceHistoryByMonthAndYear(student.id, selectedMonth, selectedYear),
-    [student.id, selectedMonth, selectedYear],
+    () => attendanceData,
+    [attendanceData],
   )
 
-  // Calculate attendance stats for the chart based on selected month/year
-  const attendanceStats = useMemo(
-    () => getMonthlyAttendanceStatsForStudent(student.id, selectedMonth, selectedYear),
-    [student.id, selectedMonth, selectedYear],
-  )
+  // Calculate attendance stats for the chart based on actual data
+  const attendanceStats = useMemo(() => {
+    const present = attendanceData.filter(r => r.status === 'present').length
+    const absent = attendanceData.filter(r => r.status === 'absent').length
+    const late = attendanceData.filter(r => r.status === 'late').length
+    return { present, absent, late, total: attendanceData.length }
+  }, [attendanceData])
 
   // Filter and sort logic
   const filteredAndSortedHistory = useMemo(() => {
@@ -126,6 +176,15 @@ export function StudentAttendanceHistoryTab() {
       return sortConfig.direction === "asc" ? "arrow-up" : "arrow-down"
     }
     return "minus" // Neutral icon
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading attendance data...</Text>
+      </View>
+    )
   }
 
   return (
@@ -287,6 +346,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: fonts.sizes.md,
+    color: colors.textLight,
   },
   scrollContent: {
     padding: spacing.lg,
