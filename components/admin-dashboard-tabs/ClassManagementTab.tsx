@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native"
 import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
+import { useColorScheme } from "../../hooks/useColorScheme"
 import type { Class } from "../../types"
 import { Button } from "../Button"
 import { EmptyState } from "../EmptyState"
@@ -15,7 +16,25 @@ import { useClasses } from "../../hooks/useClasses"
 import { useUsers } from "../../hooks/useUsers"
 import { useClassEnrollment } from "../../hooks/useClassEnrollment"
 
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
+
 export function ClassManagementTab() {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    text: isDark ? darkColors.text : colors.text,
+  }), [isDark])
   const { classes, loading, error, addClass, updateClass, deleteClass, refetch } = useClasses()
   const { users } = useUsers()
   const { enrollStudent, unenrollStudent, loading: enrollmentLoading } = useClassEnrollment()
@@ -132,9 +151,9 @@ export function ClassManagementTab() {
 
   if (error) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Error loading classes: {error}</Text>
+          <Text style={[styles.errorText, { color: colors.danger }]}>Error loading classes: {error}</Text>
           <Button title="Retry" onPress={refetch} variant="primary" size="small" />
         </View>
       </View>
@@ -142,9 +161,9 @@ export function ClassManagementTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       <View style={styles.header}>
-        <Text style={styles.sectionTitle}>All Classes ({classes.length})</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>All Classes ({classes.length})</Text>
         <Button 
           title={loading ? "Loading..." : "Add New Class"} 
           onPress={handleAddClass} 
@@ -162,7 +181,7 @@ export function ClassManagementTab() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={loading ? () => (
           <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading classes...</Text>
+            <Text style={[styles.loadingText, { color: themeColors.text }]}>Loading classes...</Text>
           </View>
         ) : renderEmptyComponent}
         refreshing={loading}
@@ -195,7 +214,6 @@ export function ClassManagementTab() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
   },
   header: {
@@ -208,7 +226,6 @@ const styles = StyleSheet.create({
     fontSize: fonts.sizes.lg,
     fontFamily: fonts.regular,
     fontWeight: fonts.weights.semibold,
-    color: colors.text,
   },
   listContent: {
     paddingBottom: spacing.xxl,
@@ -221,7 +238,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: fonts.sizes.md,
-    color: colors.error || "#ff4444",
     textAlign: "center",
     marginBottom: spacing.md,
   },
@@ -233,7 +249,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: fonts.sizes.md,
-    color: colors.textSecondary || colors.text,
     textAlign: "center",
   },
 })

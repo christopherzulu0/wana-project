@@ -14,6 +14,15 @@ interface StudentCardProps {
   attendanceRecord?: AttendanceRecord;
   onMarkAttendance?: (student: Student, status: "present" | "absent" | "late") => void;
   showAttendanceControls?: boolean;
+  themeColors?: {
+    background?: string;
+    card?: string;
+    text?: string;
+    textLight?: string;
+    textExtraLight?: string;
+    border?: string;
+    borderLight?: string;
+  };
 }
 
 export const StudentCard = ({ 
@@ -21,6 +30,7 @@ export const StudentCard = ({
   attendanceRecord,
   onMarkAttendance,
   showAttendanceControls = false,
+  themeColors,
 }: StudentCardProps) => {
   const router = useRouter();
 
@@ -32,6 +42,13 @@ export const StudentCard = ({
     if (onMarkAttendance) {
       onMarkAttendance(student, status);
     }
+  };
+
+  const cardThemeColors = {
+    text: themeColors?.text || colors.text,
+    textLight: themeColors?.textLight || colors.textLight,
+    textExtraLight: themeColors?.textExtraLight || colors.textExtraLight,
+    borderLight: themeColors?.borderLight || colors.borderLight,
   };
 
   return (
@@ -48,8 +65,12 @@ export const StudentCard = ({
         />
         
         <View style={styles.details}>
-          <Text style={styles.name}>{student.name}</Text>
-          <Text style={styles.rollNumber}>Roll No: {student.rollNumber}</Text>
+          <Text style={[styles.name, { color: cardThemeColors.text }]}>{student.name}</Text>
+          {student.rollNumber && (
+            <Text style={[styles.rollNumber, { color: cardThemeColors.textLight || cardThemeColors.textExtraLight }]}>
+              {student.registrationNumber ? `Reg No: ${student.registrationNumber}` : `Roll No: ${student.rollNumber}`}
+            </Text>
+          )}
         </View>
         
         {attendanceRecord && (
@@ -58,7 +79,7 @@ export const StudentCard = ({
       </TouchableOpacity>
 
       {showAttendanceControls && (
-        <View style={styles.attendanceControls}>
+        <View style={[styles.attendanceControls, { borderTopColor: cardThemeColors.borderLight }]}>
           <TouchableOpacity
             style={[
               styles.attendanceButton,
@@ -67,18 +88,19 @@ export const StudentCard = ({
             ]}
             onPress={() => handleMarkAttendance("present")}
           >
-            <Text style={styles.buttonText}>Present</Text>
+            <Text style={[styles.buttonText, { color: colors.statusPresent }]}>Present</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
             style={[
               styles.attendanceButton,
               styles.lateButton,
+              { borderLeftColor: cardThemeColors.borderLight, borderRightColor: cardThemeColors.borderLight },
               attendanceRecord?.status === "late" && styles.activeButton
             ]}
             onPress={() => handleMarkAttendance("late")}
           >
-            <Text style={styles.buttonText}>Late</Text>
+            <Text style={[styles.buttonText, { color: colors.statusLate }]}>Late</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -89,7 +111,7 @@ export const StudentCard = ({
             ]}
             onPress={() => handleMarkAttendance("absent")}
           >
-            <Text style={styles.buttonText}>Absent</Text>
+            <Text style={[styles.buttonText, { color: colors.statusAbsent }]}>Absent</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -116,18 +138,15 @@ const styles = StyleSheet.create({
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
     fontWeight: fonts.weights.semibold,
-    color: colors.text,
     marginBottom: spacing.xs / 2,
   },
   rollNumber: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.textLight,
   },
   attendanceControls: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
   },
   attendanceButton: {
     flex: 1,
@@ -142,8 +161,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.statusLate + "20", // 20% opacity
     borderLeftWidth: 1,
     borderRightWidth: 1,
-    borderLeftColor: colors.borderLight,
-    borderRightColor: colors.borderLight,
   },
   absentButton: {
     backgroundColor: colors.statusAbsent + "20", // 20% opacity
@@ -155,6 +172,5 @@ const styles = StyleSheet.create({
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
     fontWeight: fonts.weights.medium,
-    color: colors.text,
   },
 });

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { colors } from '../../constants/Colors';
 import { spacing } from '../../constants/spacing';
+import { useColorScheme } from '../../hooks/useColorScheme';
 import { CreateStudentData, UpdateStudentData, useStudents } from '../../hooks/useStudents';
 import { Student } from '../../types';
 import { Button } from '../Button';
@@ -21,7 +22,31 @@ import { Card } from '../Card';
 import { EmptyState } from '../EmptyState';
 import { StudentFormModal } from '../StudentFormModal';
 
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  textExtraLight: "#6C757D",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
+
 export const StudentManagementTab: React.FC = () => {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
   const { students, loading, error, addStudent, updateStudent, deleteStudent, fetchStudents } = useStudents();
   const { width } = useWindowDimensions();
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -142,11 +167,11 @@ export const StudentManagementTab: React.FC = () => {
           </Text>
         </View>
         <View style={styles.studentInfo}>
-          <Text style={styles.studentName}>{student.name}</Text>
-          <Text style={styles.studentDetail}>
+          <Text style={[styles.studentName, { color: themeColors.text }]}>{student.name}</Text>
+          <Text style={[styles.studentDetail, { color: themeColors.textLight }]}>
             {student.registrationNumber || 'No Registration Number'}
           </Text>
-          <Text style={styles.studentDetail}>
+          <Text style={[styles.studentDetail, { color: themeColors.textLight }]}>
             {student.email || 'No Email'}
           </Text>
           {(student.password || generatedPasswords[student.id]) && (
@@ -155,7 +180,7 @@ export const StudentManagementTab: React.FC = () => {
                 Password: {student.password || generatedPasswords[student.id]}
               </Text>
               <TouchableOpacity
-                style={styles.copyButton}
+                style={[styles.copyButton, { backgroundColor: themeColors.borderLight }]}
                 onPress={() => handleCopyPassword(student.password || generatedPasswords[student.id])}
               >
                 <Ionicons name="copy-outline" size={16} color={colors.primary} />
@@ -172,7 +197,7 @@ export const StudentManagementTab: React.FC = () => {
         
         <View style={styles.studentActions}>
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, { backgroundColor: themeColors.borderLight }]}
             onPress={() => handleEditStudent(student)}
             disabled={!!actionLoading}
           >
@@ -180,7 +205,7 @@ export const StudentManagementTab: React.FC = () => {
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
+            style={[styles.actionButton, styles.deleteButton, { backgroundColor: themeColors.borderLight }]}
             onPress={() => handleDeleteStudent(student)}
             disabled={!!actionLoading}
           >
@@ -193,11 +218,11 @@ export const StudentManagementTab: React.FC = () => {
         </View>
       </View>
       
-      <View style={styles.studentStats}>
-        <Text style={styles.statText}>
+      <View style={[styles.studentStats, { borderTopColor: themeColors.border }]}>
+        <Text style={[styles.statText, { color: themeColors.textLight }]}>
           Enrolled Classes: {student.enrolledClassesCount || 0}
         </Text>
-        <Text style={styles.statText}>
+        <Text style={[styles.statText, { color: themeColors.textLight }]}>
           Created: {new Date(student.createdAt).toLocaleDateString()}
         </Text>
       </View>
@@ -233,26 +258,26 @@ export const StudentManagementTab: React.FC = () => {
 
   if (loading && (!students || students.length === 0)) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: themeColors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading students...</Text>
+        <Text style={[styles.loadingText, { color: themeColors.text }]}>Loading students...</Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
+      <View style={[styles.errorContainer, { backgroundColor: themeColors.background }]}>
+        <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
         <Button title="Retry" onPress={fetchStudents} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       <View style={[styles.header, width < 420 && styles.headerStack]}>
-        <Text style={styles.title}>Student Management</Text>
+        <Text style={[styles.title, { color: themeColors.text }]}>Student Management</Text>
         <Button
           title="Add Student"
           onPress={handleAddStudent}
@@ -262,14 +287,14 @@ export const StudentManagementTab: React.FC = () => {
       </View>
 
       <View style={styles.toolbar}>
-        <View style={styles.searchWrapper}>
-          <Ionicons name="search" size={18} color={colors.textExtraLight} style={styles.searchIcon} />
+        <View style={[styles.searchWrapper, { backgroundColor: themeColors.card, borderColor: themeColors.border }]}>
+          <Ionicons name="search" size={18} color={themeColors.textLight} style={styles.searchIcon} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search by name, email, or registration #"
-            placeholderTextColor={colors.textExtraLight}
-            style={styles.searchInput}
+            placeholderTextColor={themeColors.textLight}
+            style={[styles.searchInput, { color: themeColors.text }]}
           />
         </View>
         <ScrollView
@@ -281,27 +306,57 @@ export const StudentManagementTab: React.FC = () => {
           <View style={styles.filtersRow}>
             <TouchableOpacity
               onPress={() => setAccountFilter('all')}
-              style={[styles.chip, accountFilter === 'all' && styles.chipActive]}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: accountFilter === 'all' ? colors.primary + '10' : themeColors.card,
+                  borderColor: accountFilter === 'all' ? colors.primary : themeColors.border,
+                }
+              ]}
             >
-              <Text style={[styles.chipText, accountFilter === 'all' && styles.chipTextActive]}>All</Text>
+              <Text style={[
+                styles.chipText,
+                { color: accountFilter === 'all' ? colors.primary : themeColors.text },
+                accountFilter === 'all' && styles.chipTextActive
+              ]}>All</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setAccountFilter('has')}
-              style={[styles.chip, accountFilter === 'has' && styles.chipActive]}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: accountFilter === 'has' ? colors.primary + '10' : themeColors.card,
+                  borderColor: accountFilter === 'has' ? colors.primary : themeColors.border,
+                }
+              ]}
             >
-              <Text style={[styles.chipText, accountFilter === 'has' && styles.chipTextActive]}>Has Account</Text>
+              <Text style={[
+                styles.chipText,
+                { color: accountFilter === 'has' ? colors.primary : themeColors.text },
+                accountFilter === 'has' && styles.chipTextActive
+              ]}>Has Account</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setAccountFilter('no')}
-              style={[styles.chip, accountFilter === 'no' && styles.chipActive]}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: accountFilter === 'no' ? colors.primary + '10' : themeColors.card,
+                  borderColor: accountFilter === 'no' ? colors.primary : themeColors.border,
+                }
+              ]}
             >
-              <Text style={[styles.chipText, accountFilter === 'no' && styles.chipTextActive]}>No Account</Text>
+              <Text style={[
+                styles.chipText,
+                { color: accountFilter === 'no' ? colors.primary : themeColors.text },
+                accountFilter === 'no' && styles.chipTextActive
+              ]}>No Account</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
                 setSortBy(prev => prev === 'created-desc' ? 'created-asc' : prev === 'created-asc' ? 'name-asc' : prev === 'name-asc' ? 'name-desc' : 'created-desc');
               }}
-              style={[styles.sortButton, { marginLeft: spacing.xs }]}
+              style={[styles.sortButton, { backgroundColor: themeColors.card, borderColor: themeColors.border, marginLeft: spacing.xs }]}
             >
               <Ionicons name="swap-vertical" size={16} color={colors.primary} />
               <Text style={styles.sortText}>
@@ -313,7 +368,7 @@ export const StudentManagementTab: React.FC = () => {
             </TouchableOpacity>
           </View>
         </ScrollView>
-        <Text style={styles.countText}>{filteredStudents.length} total</Text>
+        <Text style={[styles.countText, { color: themeColors.textLight }]}>{filteredStudents.length} total</Text>
       </View>
 
       {!filteredStudents || filteredStudents.length === 0 ? (
@@ -360,7 +415,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: colors.text,
   },
   addButtonFull: {
     width: '100%',
@@ -386,9 +440,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 8,
-    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.sm,
@@ -398,7 +450,6 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: colors.text,
   },
   filters: {
     flexDirection: 'row',
@@ -410,21 +461,16 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
   },
   chipActive: {
-    backgroundColor: colors.primary + '10',
-    borderColor: colors.primary,
+    // Handled inline
   },
   chipText: {
-    color: colors.text,
     fontSize: 12,
   },
   chipTextActive: {
-    color: colors.primary,
     fontWeight: '600',
   },
   sortButton: {
@@ -435,8 +481,6 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
   },
   sortText: {
     fontSize: 12,
@@ -444,7 +488,6 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontSize: 12,
-    color: colors.textLight,
   },
   studentsList: {
     flex: 1,
@@ -480,12 +523,10 @@ const styles = StyleSheet.create({
   studentName: {
     fontSize: 18,
     fontWeight: '600',
-    color: colors.text,
     marginBottom: spacing.xs,
   },
   studentDetail: {
     fontSize: 14,
-    color: colors.textLight,
     marginBottom: spacing.xs,
   },
   passwordContainer: {
@@ -504,7 +545,6 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     marginLeft: spacing.sm,
     borderRadius: 4,
-    backgroundColor: colors.borderLight,
   },
   accountBadge: {
     flexDirection: 'row',
@@ -524,21 +564,18 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: spacing.sm,
     borderRadius: 8,
-    backgroundColor: colors.borderLight,
   },
   deleteButton: {
-    backgroundColor: colors.borderLight,
+    // Handled inline
   },
   studentStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   statText: {
     fontSize: 12,
-    color: colors.textLight,
   },
   centered: {
     flex: 1,
@@ -548,7 +585,6 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: spacing.md,
     fontSize: 16,
-    color: colors.textLight,
   },
   errorContainer: {
     flex: 1,
@@ -558,7 +594,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: colors.danger,
     textAlign: 'center',
     marginBottom: spacing.lg,
   },

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { User } from "../types";
 
-const API_BASE_URL = 'http://10.59.131.203:3000';
+const API_BASE_URL = 'http://10.156.181.203:3000';
 
 // Define the context type
 interface AuthContextType {

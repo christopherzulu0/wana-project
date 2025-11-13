@@ -6,22 +6,32 @@ import { spacing } from "../../constants/spacing"
 import { Card } from "../Card"
 import { fonts } from "../../constants/fonts"
 import { useAuth } from "../../hooks/useAuth"
-import {
-  mockStudents,
-  getStudentAttendanceHistoryByMonthAndYear,
-  getMonthlyAttendanceStatsForStudent,
-} from "../../utils/mockData"
+// Removed mock data imports - now fetching from API
 import { AttendanceStatusBadge } from "../AttendanceStatusBadge"
 import { formatDate } from "../../utils/dateUtils"
 import { AttendanceChart } from "../AttendanceChart"
 import { EmptyState } from "../EmptyState"
 import { Feather } from "@expo/vector-icons"
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { RefreshControl } from "react-native"
+import { useFocusEffect } from "expo-router"
+import { useColorScheme } from "../../hooks/useColorScheme"
 
-const API_BASE_URL = 'http://10.47.117.203:3000'
+const API_BASE_URL = 'http://10.156.181.203:3000'
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  textExtraLight: "#6C757D",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 type FilterStatus = "all" | "present" | "absent" | "late"
-type SortColumn = "date" | "status"
+type SortColumn = "date" | "status" | "class"
 type SortDirection = "asc" | "desc"
 
 const months = [
@@ -44,12 +54,19 @@ const years = Array.from({ length: 5 }, (_, i) => currentYear - i) // Last 5 yea
 
 export function StudentAttendanceHistoryTab() {
   const { user } = useAuth()
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
 
-  // Memoize student to prevent infinite re-renders
-  const student = useMemo(
-    () => mockStudents.find((s) => s.id === user?.id) || mockStudents[0],
-    [user?.id]
-  )
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
 
   // State for month and year selection
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth()) // 0-indexed
@@ -65,17 +82,83 @@ export function StudentAttendanceHistoryTab() {
   const itemsPerPage = 10
 
   // State for API data
+  const [studentId, setStudentId] = useState<string | null>(null)
   const [attendanceData, setAttendanceData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  
+  // Ref for polling interval
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const POLL_INTERVAL = 30000 // 30 seconds
 
-  // Wrap fetchAttendanceHistory in useCallback to prevent infinite re-renders
-  const fetchAttendanceHistory = useCallback(async () => {
+  // Fetch student record first (to get student ID from user ID)
+  const fetchStudentRecord = useCallback(async () => {
+    if (!user?.id) {
+      setError('User not logged in')
+      setLoading(false)
+      return
+    }
+
+    // Check if user is actually a student
+    if (user.role !== 'student') {
+      setError('Access denied. This page is only available for students.')
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
 
-      const url = `${API_BASE_URL}/api/students/${student.id}/attendance?month=${selectedMonth + 1}&year=${selectedYear}`
+      console.log('Fetching student record for user ID:', user.id)
+      const response = await fetch(`${API_BASE_URL}/api/students/by-user/${user.id}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Student record response:', data)
+        if (data.student?.id) {
+          setStudentId(data.student.id.toString())
+          setError(null) // Clear any previous errors
+        } else {
+          setError('Student record not found. Please contact an administrator to link your account.')
+        }
+      } else if (response.status === 404) {
+        // Student record doesn't exist or isn't linked
+        const errorData = await response.json().catch(() => ({ error: 'Student not found' }))
+        console.error('Student not found for user:', user.id, 'Error:', errorData.error)
+        setError('Your student record is not linked to your account. Please contact an administrator to link your student profile to your user account.')
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch student record' }))
+        console.error('Error fetching student record:', errorData)
+        setError(errorData.error || 'Failed to fetch student record. Please try again later.')
+      }
+    } catch (err) {
+      console.error('Error fetching student record:', err)
+      setError('Network error occurred while fetching student data. Please check your connection and try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id, user?.role])
+
+  // Fetch student record on mount
+  useEffect(() => {
+    fetchStudentRecord()
+  }, [fetchStudentRecord])
+
+  // Wrap fetchAttendanceHistory in useCallback to prevent infinite re-renders
+  const fetchAttendanceHistory = useCallback(async (showLoading = true) => {
+    if (!studentId) {
+      return // Wait for student ID to be fetched
+    }
+
+    try {
+      if (showLoading) {
+        setLoading(true)
+      }
+      setError(null)
+
+      const url = `${API_BASE_URL}/api/students/${studentId}/attendance?month=${selectedMonth + 1}&year=${selectedYear}`
       console.log('Fetching attendance from:', url)
 
       const response = await fetch(url)
@@ -87,25 +170,69 @@ export function StudentAttendanceHistoryTab() {
         const data = await response.json()
         console.log('Attendance data received:', data.attendance?.length || 0, 'records')
         setAttendanceData(data.attendance || [])
+        setError(null) // Clear any errors on success
       } else {
-        // Fallback to mock data if API fails
-        console.log('API returned error status, using mock data')
-        setAttendanceData(getStudentAttendanceHistoryByMonthAndYear(student.id, selectedMonth, selectedYear))
+        const errorData = await response.json().catch(() => ({}))
+        setError(errorData.error || 'Failed to fetch attendance records')
+        // Don't clear data on error, keep existing data visible
       }
     } catch (err) {
       console.error('Error fetching attendance:', err)
-      console.log('Using mock data due to error')
-      // Fallback to mock data
-      setAttendanceData(getStudentAttendanceHistoryByMonthAndYear(student.id, selectedMonth, selectedYear))
+      setError('Network error occurred while fetching attendance data')
+      // Don't clear data on error, keep existing data visible
     } finally {
+      if (showLoading) {
       setLoading(false)
+      }
+      setRefreshing(false)
     }
-  }, [student.id, selectedMonth, selectedYear])
+  }, [studentId, selectedMonth, selectedYear])
 
-  // Fetch attendance data from API
-  useEffect(() => {
-    fetchAttendanceHistory()
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true)
+    fetchAttendanceHistory(false) // Don't show loading spinner for pull-to-refresh
   }, [fetchAttendanceHistory])
+
+  // Set up polling when studentId is available
+  useEffect(() => {
+    if (!studentId) {
+      return
+    }
+
+    // Clear any existing interval
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+
+    // Initial fetch
+    fetchAttendanceHistory(true)
+
+    // Set up polling interval
+    pollIntervalRef.current = setInterval(() => {
+      console.log('Auto-refreshing attendance data...')
+      fetchAttendanceHistory(false) // Silent refresh in background
+    }, POLL_INTERVAL)
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [studentId, selectedMonth, selectedYear, fetchAttendanceHistory])
+
+  // Refetch when tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (studentId) {
+        console.log('Tab focused, refreshing attendance data...')
+        fetchAttendanceHistory(false) // Silent refresh when tab becomes active
+      }
+    }, [studentId, fetchAttendanceHistory])
+  )
 
   // Get attendance history for the selected month and year
   const monthlyAttendanceHistory = useMemo(
@@ -142,6 +269,9 @@ export function StudentAttendanceHistoryTab() {
         } else if (sortConfig.column === "status") {
           aValue = a.status.toLowerCase()
           bValue = b.status.toLowerCase()
+        } else if (sortConfig.column === "class") {
+          aValue = (a.className || '').toLowerCase()
+          bValue = (b.className || '').toLowerCase()
         }
 
         if (aValue < bValue) {
@@ -178,37 +308,172 @@ export function StudentAttendanceHistoryTab() {
     return "minus" // Neutral icon
   }
 
+  // Dynamic styles based on theme
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    loadingText: {
+      marginTop: spacing.md,
+      fontSize: fonts.sizes.md,
+      color: themeColors.textLight,
+    },
+    scrollContent: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xxl,
+    },
+    sectionTitle: {
+      fontSize: fonts.sizes.lg,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.semibold as any,
+      color: themeColors.text,
+      marginBottom: spacing.md,
+    },
+    filterLabel: {
+      fontSize: fonts.sizes.md,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.semibold as any,
+      color: themeColors.text,
+      marginBottom: spacing.sm,
+    },
+    selectorChip: {
+      borderColor: themeColors.border,
+      backgroundColor: themeColors.card,
+    },
+    selectorChipText: {
+      color: themeColors.text,
+    },
+    filterButton: {
+      borderColor: themeColors.border,
+      backgroundColor: themeColors.card,
+    },
+    filterButtonText: {
+      color: themeColors.text,
+    },
+    tableHeader: {
+      backgroundColor: themeColors.borderLight,
+      borderBottomColor: themeColors.border,
+    },
+    headerText: {
+      color: themeColors.text,
+    },
+    historyItem: {
+      backgroundColor: themeColors.card,
+    },
+    dateText: {
+      color: themeColors.text,
+    },
+    classText: {
+      color: themeColors.text,
+    },
+    borderBottom: {
+      borderBottomColor: themeColors.borderLight,
+    },
+    paginationContainer: {
+      borderTopColor: themeColors.borderLight,
+      backgroundColor: themeColors.card,
+    },
+    paginationButtonDisabled: {
+      backgroundColor: themeColors.textExtraLight,
+    },
+    paginationButtonTextDisabled: {
+      color: themeColors.textLight,
+    },
+    paginationText: {
+      color: themeColors.textLight,
+    },
+    errorText: {
+      color: colors.danger,
+    },
+    errorBanner: {
+      backgroundColor: isDark ? `${colors.danger}20` : "#fef2f2",
+      borderColor: isDark ? `${colors.danger}40` : "#fecaca",
+    },
+    errorBannerText: {
+      color: colors.danger,
+    },
+    refreshButton: {
+      backgroundColor: themeColors.card,
+      borderColor: themeColors.border,
+    },
+  }), [themeColors, isDark])
+
   if (loading) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
+      <View style={[dynamicStyles.container as any, styles.centerContent]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading attendance data...</Text>
+        <Text style={dynamicStyles.loadingText as any}>
+          {studentId ? 'Loading attendance data...' : 'Loading student record...'}
+        </Text>
+      </View>
+    )
+  }
+
+  if (error && !studentId) {
+    return (
+      <View style={[dynamicStyles.container as any, styles.centerContent]}>
+        <Feather name="alert-circle" size={48} color={colors.danger} />
+        <Text style={[styles.errorText, dynamicStyles.errorText] as any}>{error}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton as any} 
+          onPress={fetchStudentRecord}
+        >
+          <Text style={styles.retryButtonText as any}>Retry</Text>
+        </TouchableOpacity>
       </View>
     )
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.sectionTitle}>Your Attendance Overview</Text>
+    <ScrollView 
+      style={dynamicStyles.container as any} 
+      contentContainerStyle={dynamicStyles.scrollContent as any}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
+    >
+      <View style={styles.headerRow as any}>
+        <Text style={dynamicStyles.sectionTitle as any}>Your Attendance Overview</Text>
+        <TouchableOpacity 
+          style={[styles.refreshButton, dynamicStyles.refreshButton] as any}
+          onPress={handleRefresh}
+          disabled={refreshing}
+        >
+          <Feather 
+            name="refresh-cw" 
+            size={20} 
+            color={colors.primary}
+            style={refreshing && styles.refreshingIcon as any}
+          />
+        </TouchableOpacity>
+      </View>
       <AttendanceChart stats={attendanceStats} />
 
-      <Text style={styles.sectionTitle}>Attendance History</Text>
+      <View style={styles.headerRow as any}>
+        <Text style={dynamicStyles.sectionTitle as any}>Attendance History</Text>
+      </View>
 
       {/* Month and Year Selectors */}
-      <View style={styles.dateSelectorsContainer}>
-        <View style={styles.dateSelector}>
-          <Text style={styles.filterLabel}>Month:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorChips}>
+      <View style={styles.dateSelectorsContainer as any}>
+        <View style={styles.dateSelector as any}>
+          <Text style={dynamicStyles.filterLabel as any}>Month:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorChips as any}>
             {months.map((monthName, index) => (
               <TouchableOpacity
                 key={monthName}
-                style={[styles.selectorChip, selectedMonth === index && styles.activeSelectorChip]}
+                style={[styles.selectorChip, dynamicStyles.selectorChip as any, selectedMonth === index && styles.activeSelectorChip] as any}
                 onPress={() => {
                   setSelectedMonth(index)
                   setCurrentPage(1) // Reset pagination on month change
                 }}
               >
-                <Text style={[styles.selectorChipText, selectedMonth === index && styles.activeSelectorChipText]}>
+              <Text style={[styles.selectorChipText, dynamicStyles.selectorChipText, selectedMonth === index && styles.activeSelectorChipText] as any}>
                   {monthName}
                 </Text>
               </TouchableOpacity>
@@ -216,19 +481,19 @@ export function StudentAttendanceHistoryTab() {
           </ScrollView>
         </View>
 
-        <View style={styles.dateSelector}>
-          <Text style={styles.filterLabel}>Year:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorChips}>
+        <View style={styles.dateSelector as any}>
+          <Text style={dynamicStyles.filterLabel as any}>Year:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorChips as any}>
             {years.map((yearValue) => (
               <TouchableOpacity
                 key={yearValue}
-                style={[styles.selectorChip, selectedYear === yearValue && styles.activeSelectorChip]}
+                style={[styles.selectorChip, dynamicStyles.selectorChip as any, selectedYear === yearValue && styles.activeSelectorChip] as any}
                 onPress={() => {
                   setSelectedYear(yearValue)
                   setCurrentPage(1) // Reset pagination on year change
                 }}
               >
-                <Text style={[styles.selectorChipText, selectedYear === yearValue && styles.activeSelectorChipText]}>
+                <Text style={[styles.selectorChipText, dynamicStyles.selectorChipText, selectedYear === yearValue && styles.activeSelectorChipText] as any}>
                   {yearValue}
                 </Text>
               </TouchableOpacity>
@@ -238,59 +503,70 @@ export function StudentAttendanceHistoryTab() {
       </View>
 
       {/* Filter Controls */}
-      <View style={styles.filterContainer}>
-        <Text style={styles.filterLabel}>Filter by Status:</Text>
-        <View style={styles.filterButtons}>
+      <View style={styles.filterContainer as any}>
+        <Text style={dynamicStyles.filterLabel as any}>Filter by Status:</Text>
+        <View style={styles.filterButtons as any}>
           <TouchableOpacity
-            style={[styles.filterButton, filterStatus === "all" && styles.activeFilterButton]}
+            style={[styles.filterButton, dynamicStyles.filterButton as any, filterStatus === "all" && styles.activeFilterButton] as any}
             onPress={() => setFilterStatus("all")}
           >
-            <Text style={[styles.filterButtonText, filterStatus === "all" && styles.activeFilterButtonText]}>All</Text>
+            <Text style={[styles.filterButtonText, dynamicStyles.filterButtonText, filterStatus === "all" && styles.activeFilterButtonText] as any}>All</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.filterButton, filterStatus === "present" && styles.activeFilterButton]}
+            style={[styles.filterButton, dynamicStyles.filterButton as any, filterStatus === "present" && styles.activeFilterButton] as any}
             onPress={() => setFilterStatus("present")}
           >
-            <Text style={[styles.filterButtonText, filterStatus === "present" && styles.activeFilterButtonText]}>
+            <Text style={[styles.filterButtonText, dynamicStyles.filterButtonText, filterStatus === "present" && styles.activeFilterButtonText] as any}>
               Present
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.filterButton, filterStatus === "absent" && styles.activeFilterButton]}
+            style={[styles.filterButton, dynamicStyles.filterButton as any, filterStatus === "absent" && styles.activeFilterButton] as any}
             onPress={() => setFilterStatus("absent")}
           >
-            <Text style={[styles.filterButtonText, filterStatus === "absent" && styles.activeFilterButtonText]}>
+            <Text style={[styles.filterButtonText, dynamicStyles.filterButtonText, filterStatus === "absent" && styles.activeFilterButtonText] as any}>
               Absent
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.filterButton, filterStatus === "late" && styles.activeFilterButton]}
+            style={[styles.filterButton, dynamicStyles.filterButton as any, filterStatus === "late" && styles.activeFilterButton] as any}
             onPress={() => setFilterStatus("late")}
           >
-            <Text style={[styles.filterButtonText, filterStatus === "late" && styles.activeFilterButtonText]}>
+            <Text style={[styles.filterButtonText, dynamicStyles.filterButtonText, filterStatus === "late" && styles.activeFilterButtonText] as any}>
               Late
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {filteredAndSortedHistory.length === 0 ? (
+      {error && studentId ? (
+        <View style={[styles.errorBanner, dynamicStyles.errorBanner] as any}>
+          <Feather name="alert-circle" size={20} color={colors.danger} />
+          <Text style={[styles.errorBannerText, dynamicStyles.errorBannerText] as any}>{error}</Text>
+        </View>
+      ) : null}
+
+      {filteredAndSortedHistory.length === 0 && !loading ? (
         <EmptyState
           title="No Attendance Records"
           message="Your attendance history will appear here once recorded, or adjust your filters."
           icon="clipboard"
         />
       ) : (
-        <Card variant="outlined" style={styles.historyCard}>
+        <Card variant="outlined" style={styles.historyCard as any}>
           {/* Table Header */}
-          <View style={styles.tableHeader}>
-            <TouchableOpacity style={styles.headerCell} onPress={() => handleSort("date")}>
-              <Text style={styles.headerText}>Date</Text>
-              <Feather name={getSortIcon("date")} size={14} color={colors.text} />
+          <View style={[styles.tableHeader, dynamicStyles.tableHeader] as any}>
+            <TouchableOpacity style={styles.headerCell as any} onPress={() => handleSort("date")}>
+              <Text style={[styles.headerText, dynamicStyles.headerText] as any}>Date</Text>
+              <Feather name={getSortIcon("date")} size={14} color={themeColors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerCell} onPress={() => handleSort("status")}>
-              <Text style={styles.headerText}>Status</Text>
-              <Feather name={getSortIcon("status")} size={14} color={colors.text} />
+            <TouchableOpacity style={styles.headerCell as any} onPress={() => handleSort("class")}>
+              <Text style={[styles.headerText, dynamicStyles.headerText] as any}>Class</Text>
+              <Feather name={getSortIcon("class")} size={14} color={themeColors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerCell as any} onPress={() => handleSort("status")}>
+              <Text style={[styles.headerText, dynamicStyles.headerText] as any}>Status</Text>
+              <Feather name={getSortIcon("status")} size={14} color={themeColors.text} />
             </TouchableOpacity>
           </View>
 
@@ -298,38 +574,42 @@ export function StudentAttendanceHistoryTab() {
           {paginatedHistory.map((record, index) => (
             <View
               key={record.id}
-              style={[styles.historyItem, index < paginatedHistory.length - 1 && styles.borderBottom]}
+              style={[styles.historyItem, dynamicStyles.historyItem as any, index < paginatedHistory.length - 1 && [styles.borderBottom, dynamicStyles.borderBottom] as any] as any}
             >
-              <Text style={styles.dateText}>{formatDate(record.date)}</Text>
+              <Text style={[styles.dateText, dynamicStyles.dateText] as any}>{formatDate(record.date)}</Text>
+              <Text style={[styles.classText, dynamicStyles.classText] as any}>
+                {record.className || 'Unknown'}
+                {record.section && ` (${record.section})`}
+              </Text>
               <AttendanceStatusBadge status={record.status} />
             </View>
           ))}
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <View style={styles.paginationContainer}>
+            <View style={[styles.paginationContainer, dynamicStyles.paginationContainer] as any}>
               <TouchableOpacity
-                style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
+                style={[styles.paginationButton, currentPage === 1 && [styles.paginationButtonDisabled, dynamicStyles.paginationButtonDisabled] as any] as any}
                 onPress={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
               >
-                <Text style={[styles.paginationButtonText, currentPage === 1 && styles.paginationButtonTextDisabled]}>
+                <Text style={[styles.paginationButtonText, currentPage === 1 && [styles.paginationButtonTextDisabled, dynamicStyles.paginationButtonTextDisabled]] as any}>
                   Previous
                 </Text>
               </TouchableOpacity>
-              <Text style={styles.paginationText}>
+              <Text style={[styles.paginationText, dynamicStyles.paginationText] as any}>
                 Page {currentPage} of {totalPages}
               </Text>
               <TouchableOpacity
-                style={[styles.paginationButton, currentPage === totalPages && styles.paginationButtonDisabled]}
+                style={[styles.paginationButton, currentPage === totalPages && [styles.paginationButtonDisabled, dynamicStyles.paginationButtonDisabled] as any] as any}
                 onPress={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
               >
                 <Text
                   style={[
                     styles.paginationButtonText,
-                    currentPage === totalPages && styles.paginationButtonTextDisabled,
-                  ]}
+                    currentPage === totalPages && [styles.paginationButtonTextDisabled, dynamicStyles.paginationButtonTextDisabled],
+                  ] as any}
                 >
                   Next
                 </Text>
@@ -343,29 +623,9 @@ export function StudentAttendanceHistoryTab() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: spacing.md,
-    fontSize: fonts.sizes.md,
-    color: colors.textLight,
-  },
-  scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  sectionTitle: {
-    fontSize: fonts.sizes.lg,
-    fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.md,
   },
   historyCard: {
     padding: 0,
@@ -385,8 +645,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: 100,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
     marginRight: spacing.sm,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -403,22 +661,14 @@ const styles = StyleSheet.create({
   selectorChipText: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.text,
-    fontWeight: fonts.weights.medium,
+    fontWeight: fonts.weights.medium as any,
   },
   activeSelectorChipText: {
     color: colors.card,
-    fontWeight: fonts.weights.semibold,
+    fontWeight: fonts.weights.semibold as any,
   },
   filterContainer: {
     marginBottom: spacing.xl, // Increased spacing
-  },
-  filterLabel: {
-    fontSize: fonts.sizes.md,
-    fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.sm,
   },
   filterButtons: {
     flexDirection: "row",
@@ -430,8 +680,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: 100,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
     shadowColor: "#000", // Added subtle shadow
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -447,21 +695,18 @@ const styles = StyleSheet.create({
   filterButtonText: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.text,
-    fontWeight: fonts.weights.medium, // Slightly bolder text
+    fontWeight: fonts.weights.medium as any, // Slightly bolder text
   },
   activeFilterButtonText: {
     color: colors.card,
-    fontWeight: fonts.weights.semibold, // Bolder text when active
+    fontWeight: fonts.weights.semibold as any, // Bolder text when active
   },
   tableHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg, // Increased horizontal padding
-    backgroundColor: colors.borderLight, // Lighter background for header
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   headerCell: {
     flexDirection: "row",
@@ -473,8 +718,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
-    color: colors.text,
+    fontWeight: fonts.weights.semibold as any,
     marginRight: spacing.xs,
   },
   historyItem: {
@@ -483,18 +727,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg, // Consistent padding with header
-    backgroundColor: colors.card, // Ensure white background for rows
   },
   dateText: {
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
-    color: colors.text,
     flex: 1, // Allow date text to take space
-    textAlign: "center", // Center align date text
+    textAlign: "center" as const, // Center align date text
+  },
+  classText: {
+    fontSize: fonts.sizes.md,
+    fontFamily: fonts.regular,
+    flex: 1.5, // Give class name a bit more space
+    textAlign: "center" as const,
+    fontWeight: fonts.weights.medium as any,
   },
   borderBottom: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
   },
   paginationContainer: {
     flexDirection: "row",
@@ -502,8 +750,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    backgroundColor: colors.card, // Ensure white background for pagination area
     borderBottomLeftRadius: spacing.md, // Apply bottom radius to card
     borderBottomRightRadius: spacing.md,
   },
@@ -514,20 +760,67 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   paginationButtonDisabled: {
-    backgroundColor: colors.textExtraLight, // Grey out disabled buttons
+    // Background color handled by dynamicStyles
   },
   paginationButtonText: {
     color: colors.card,
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.medium,
+    fontWeight: fonts.weights.medium as any,
   },
   paginationButtonTextDisabled: {
-    color: colors.textLight, // Lighter text for disabled buttons
+    // Color handled by dynamicStyles
   },
   paginationText: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.textLight,
+  },
+  errorText: {
+    marginTop: spacing.md,
+    fontSize: fonts.sizes.md,
+    fontFamily: fonts.regular,
+    textAlign: "center" as const,
+    paddingHorizontal: spacing.lg,
+  },
+  retryButton: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: spacing.md,
+    backgroundColor: colors.primary,
+  },
+  retryButtonText: {
+    color: colors.card,
+    fontSize: fonts.sizes.md,
+    fontFamily: fonts.regular,
+    fontWeight: fonts.weights.semibold as any,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  errorBannerText: {
+    fontSize: fonts.sizes.sm,
+    fontFamily: fonts.regular,
+    marginLeft: spacing.sm,
+    flex: 1,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  refreshButton: {
+    padding: spacing.sm,
+    borderRadius: spacing.sm,
+    borderWidth: 1,
+  },
+  refreshingIcon: {
+    opacity: 0.5,
   },
 })

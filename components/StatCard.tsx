@@ -12,6 +12,12 @@ export type StatCardProps = {
     color?: string
     subtitle?: string
     compact?: boolean
+    themeColors?: {
+        card: string
+        text: string
+        textLight: string
+        borderLight: string
+    }
 }
 
 export function StatCard({
@@ -21,6 +27,7 @@ export function StatCard({
     color = colors.primary,
     subtitle,
     compact = false,
+    themeColors,
 }: StatCardProps) {
     const titleSize = compact ? fonts.sizes.sm : fonts.sizes.md
     const subtitleSize = compact ? fonts.sizes.xs : fonts.sizes.sm
@@ -30,8 +37,14 @@ export function StatCard({
     const displayValue =
         typeof value === "number" ? formatNumber(value) : String(value)
 
+    // Use theme colors if provided, otherwise fall back to default colors
+    const cardBg = themeColors?.card || colors.card
+    const textColor = themeColors?.text || colors.text
+    const textLightColor = themeColors?.textLight || colors.textLight
+    const borderColor = themeColors?.borderLight || colors.borderLight
+
     return (
-        <View style={[styles.card]}>
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor }]}>
             <View style={styles.row}>
                 <View style={styles.left}>
                     <View style={styles.titleRow}>
@@ -39,7 +52,7 @@ export function StatCard({
                             <Feather name={icon} size={iconPx} color={color} />
                         </View>
                         <Text
-                            style={[styles.title, { fontSize: titleSize }]}
+                            style={[styles.title, { fontSize: titleSize, color: textColor }]}
                             numberOfLines={1}
                             ellipsizeMode="tail"
                             accessibilityRole="header"
@@ -49,7 +62,7 @@ export function StatCard({
                     </View>
                     {subtitle ? (
                         <Text
-                            style={[styles.subtitle, { fontSize: subtitleSize }]}
+                            style={[styles.subtitle, { fontSize: subtitleSize, color: textLightColor }]}
                             numberOfLines={1}
                             ellipsizeMode="tail"
                         >
@@ -85,16 +98,10 @@ function formatNumber(n: number) {
 
 /* Styles */
 
-const cardBase: ViewStyle = {
-    backgroundColor: colors.card,
-    borderRadius: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-}
-
 const styles = StyleSheet.create({
     card: {
-        ...cardBase,
+        borderRadius: spacing.md,
+        borderWidth: 1,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
         flex: 1,
@@ -126,12 +133,10 @@ const styles = StyleSheet.create({
     title: {
         flexShrink: 1,
         fontFamily: fonts.regular,
-        color: colors.text,
         fontWeight: fonts.weights.semibold,
     } as TextStyle,
     subtitle: {
         fontFamily: fonts.regular,
-        color: colors.textLight,
     },
     right: {
         maxWidth: "40%",

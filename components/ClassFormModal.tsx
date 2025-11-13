@@ -1,14 +1,26 @@
 "use client"
 
 import { Feather } from "@expo/vector-icons"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Modal, StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native"
 import { colors } from "../constants/Colors"
 import { fonts } from "../constants/fonts"
 import { spacing } from "../constants/spacing"
+import { useColorScheme } from "../hooks/useColorScheme"
 import type { Class, User } from "../types"
 import { Button } from "./Button"
 import { Input } from "./Input"
+
+// Dark mode color palette
+const darkColors = {
+    background: "#151718",
+    card: "#1F2324",
+    text: "#ECEDEE",
+    textLight: "#9BA1A6",
+    textExtraLight: "#6C757D",
+    border: "#2A2D2E",
+    borderLight: "#252829",
+}
 
 interface ClassFormModalProps {
   isVisible: boolean
@@ -19,6 +31,20 @@ interface ClassFormModalProps {
 }
 
 export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teachers }: ClassFormModalProps) => {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
+  
   const [name, setName] = useState("")
   const [section, setSection] = useState("")
   const [subject, setSubject] = useState("")
@@ -81,11 +107,11 @@ export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teache
   return (
     <Modal animationType="slide" transparent={true} visible={isVisible} onRequestClose={onClose}>
       <View style={styles.centeredView}>
-        <View style={styles.modalView}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{initialData ? "Edit Class" : "Add New Class"}</Text>
+        <View style={[styles.modalView, { backgroundColor: themeColors.card }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: themeColors.borderLight }]}>
+            <Text style={[styles.modalTitle, { color: themeColors.text }]}>{initialData ? "Edit Class" : "Add New Class"}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Feather name="x" size={24} color={colors.textLight} />
+              <Feather name="x" size={24} color={themeColors.textLight} />
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={styles.formContent}>
@@ -95,6 +121,7 @@ export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teache
               value={name}
               onChangeText={setName}
               error={errors.name}
+              themeColors={themeColors}
             />
             <Input
               label="Section"
@@ -102,6 +129,7 @@ export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teache
               value={section}
               onChangeText={setSection}
               error={errors.section}
+              themeColors={themeColors}
             />
             <Input
               label="Subject"
@@ -109,6 +137,7 @@ export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teache
               value={subject}
               onChangeText={setSubject}
               error={errors.subject}
+              themeColors={themeColors}
             />
             <Input
               label="Description (Optional)"
@@ -117,12 +146,14 @@ export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teache
               onChangeText={setDescription}
               multiline
               numberOfLines={3}
+              themeColors={themeColors}
             />
             <Input
               label="Schedule (Optional)"
               placeholder="e.g., Mon, Wed, Fri - 9:00 AM"
               value={schedule}
               onChangeText={setSchedule}
+              themeColors={themeColors}
             />
             <Input 
               label="Room (Optional)" 
@@ -130,25 +161,36 @@ export const ClassFormModal = ({ isVisible, onClose, onSave, initialData, teache
               value={room} 
               onChangeText={setRoom}
               autoCapitalize="words"
+              themeColors={themeColors}
             />
 
-            <Text style={styles.label}>Assign Teacher</Text>
+            <Text style={[styles.label, { color: themeColors.text }]}>Assign Teacher</Text>
             {errors.teacherId && <Text style={styles.errorText}>{errors.teacherId}</Text>}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teacherChips}>
               {teachers.map((teacher) => (
                 <TouchableOpacity
                   key={teacher.id}
-                  style={[styles.teacherChip, teacherId === String(teacher.id) && styles.selectedTeacher]}
+                  style={[
+                    styles.teacherChip,
+                    {
+                      backgroundColor: teacherId === String(teacher.id) ? colors.primary : themeColors.card,
+                      borderColor: teacherId === String(teacher.id) ? colors.primary : themeColors.border,
+                    }
+                  ]}
                   onPress={() => setTeacherId(String(teacher.id))}
                 >
-                  <Text style={[styles.teacherText, teacherId === String(teacher.id) && styles.selectedTeacherText]}>
+                  <Text style={[
+                    styles.teacherText,
+                    { color: teacherId === String(teacher.id) ? themeColors.card : themeColors.text },
+                    teacherId === String(teacher.id) && styles.selectedTeacherText
+                  ]}>
                     {teacher.name}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           </ScrollView>
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { borderTopColor: themeColors.borderLight }]}>
             <Button title="Cancel" onPress={onClose} variant="outline" style={styles.footerButton} />
             <Button title="Save" onPress={handleSubmit} variant="primary" style={styles.footerButton} />
           </View>
@@ -167,7 +209,6 @@ const styles = StyleSheet.create({
   },
   modalView: {
     margin: spacing.lg,
-    backgroundColor: colors.card,
     borderRadius: spacing.md,
     padding: spacing.lg,
     width: "90%",
@@ -188,13 +229,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
   },
   modalTitle: {
     fontSize: fonts.sizes.xl,
     fontFamily: fonts.regular,
     fontWeight: fonts.weights.bold,
-    color: colors.text,
   },
   closeButton: {
     padding: spacing.xs,
@@ -205,7 +244,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.text,
     marginBottom: spacing.xs,
     marginTop: spacing.md,
   },
@@ -224,8 +262,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: 100,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
     marginRight: spacing.sm,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -234,19 +270,15 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   selectedTeacher: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
     shadowOpacity: 0.1,
     elevation: 2,
   },
   teacherText: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.text,
     fontWeight: fonts.weights.medium,
   },
   selectedTeacherText: {
-    color: colors.card,
     fontWeight: fonts.weights.semibold,
   },
   modalFooter: {
@@ -255,7 +287,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
   },
   footerButton: {
     flex: 1,

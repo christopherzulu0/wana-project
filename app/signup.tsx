@@ -2,7 +2,7 @@
 
 import { Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { Button } from "../components/Button"
@@ -11,16 +11,41 @@ import { StatusBar } from "../components/StatusBar"
 import { colors } from "../constants/Colors"
 import { spacing } from "../constants/spacing"
 import { useAuth } from "../hooks/useAuth"
+import { useColorScheme } from "../hooks/useColorScheme"
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  textExtraLight: "#6C757D",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 export default function SignupScreen() {
   const router = useRouter()
   const { signup, user, loading } = useAuth()
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
 
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
 
   const handleSignup = async () => {
     if (!name || !email || !password) {
@@ -53,7 +78,7 @@ export default function SignupScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <StatusBar />
 
       <KeyboardAvoidingView
@@ -64,15 +89,15 @@ export default function SignupScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <View style={styles.logo}>
+              <View style={[styles.logo, { backgroundColor: isDark ? "#3b82f6" : "#3b82f6" }]}>
                 <Text style={styles.logoText}>A</Text>
               </View>
             </View>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join our attendance system</Text>
+            <Text style={[styles.title, { color: themeColors.text }]}>Create Account</Text>
+            <Text style={[styles.subtitle, { color: themeColors.textLight }]}>Join our attendance system</Text>
           </View>
 
-          <View style={styles.formContainer}>
+          <View style={[styles.formContainer, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}>
             <View style={styles.form}>
               {error ? (
                 <View style={styles.errorContainer}>
@@ -86,7 +111,8 @@ export default function SignupScreen() {
                 placeholder="Enter your full name"
                 value={name}
                 onChangeText={setName}
-                leftIcon={<Feather name="user" size={20} color={colors.textLight} />}
+                themeColors={themeColors}
+                leftIcon={<Feather name="user" size={20} color={themeColors.textLight} />}
               />
               <Input
                 label="Email Address"
@@ -95,7 +121,8 @@ export default function SignupScreen() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                leftIcon={<Feather name="mail" size={20} color={colors.textLight} />}
+                themeColors={themeColors}
+                leftIcon={<Feather name="mail" size={20} color={themeColors.textLight} />}
               />
               <Input
                 label="Password"
@@ -103,7 +130,8 @@ export default function SignupScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
-                leftIcon={<Feather name="lock" size={20} color={colors.textLight} />}
+                themeColors={themeColors}
+                leftIcon={<Feather name="lock" size={20} color={themeColors.textLight} />}
               />
 
               <Button title="Create Account" onPress={handleSignup} loading={isLoading} style={styles.signupButton} />
@@ -112,8 +140,8 @@ export default function SignupScreen() {
 
           <View style={styles.footer}>
             <TouchableOpacity style={styles.loginLink} onPress={handleBackToLogin}>
-              <Text style={styles.loginLinkText}>
-                Already have an account? <Text style={styles.loginLinkHighlight}>Sign In</Text>
+              <Text style={[styles.loginLinkText, { color: themeColors.textLight }]}>
+                Already have an account? <Text style={[styles.loginLinkHighlight, { color: isDark ? "#3b82f6" : "#3b82f6" }]}>Sign In</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -126,7 +154,6 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -147,7 +174,6 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: "#3b82f6",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
@@ -165,19 +191,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#1e293b",
     marginBottom: spacing.sm,
     textAlign: "center",
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 16,
-    color: "#64748b",
     textAlign: "center",
     letterSpacing: 0.3,
   },
   formContainer: {
-    backgroundColor: "#ffffff",
     borderRadius: 20,
     padding: spacing.xl,
     marginBottom: spacing.xl,
@@ -187,7 +210,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 5,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
   },
   form: {
     gap: spacing.lg,
@@ -228,12 +250,10 @@ const styles = StyleSheet.create({
   },
   loginLinkText: {
     fontSize: 16,
-    color: "#64748b",
     textAlign: "center",
     letterSpacing: 0.3,
   },
   loginLinkHighlight: {
-    color: "#3b82f6",
     fontWeight: "600",
   },
 })

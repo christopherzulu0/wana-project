@@ -37,6 +37,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="class/[id]" options={{ headerShown: false, presentation: "card" }} />
           <Stack.Screen name="student/[id]" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="user" options={{ headerShown: false }} />
           <Stack.Screen name="attendance/[classId]/[date]" options={{ headerShown: false, presentation: "card" }} />
           <Stack.Screen
             name="student-attendance/[classId]" // New route for student face scan attendance

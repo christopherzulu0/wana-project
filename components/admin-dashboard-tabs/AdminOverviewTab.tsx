@@ -1,7 +1,7 @@
 "use client"
 
 import { Feather } from "@expo/vector-icons"
-import React from "react"
+import React, { useMemo } from "react"
 import {
     ScrollView,
     StyleSheet,
@@ -16,15 +16,59 @@ import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
 import { useAuth } from "../../hooks/useAuth"
+import { useColorScheme } from "../../hooks/useColorScheme"
+import { useUsers } from "../../hooks/useUsers"
+import { useClasses } from "../../hooks/useClasses"
+import { useStudents } from "../../hooks/useStudents"
 import type { AttendanceStats } from "../../types"
-import { mockClasses, mockStudents, mockUsers } from "../../utils/mockData"
 import { AttendanceChart } from "../AttendanceChart"
 import { Button } from "../Button"
 import { StatCard } from "../StatCard"
+import { generateOverallAttendanceReport, saveAndShareReport } from "../../utils/reportGenerator"
+import { Alert } from "react-native"
 
-export function AdminOverviewTab() {
+// Dark mode color palette
+const darkColors = {
+    background: "#151718",
+    card: "#1F2324",
+    text: "#ECEDEE",
+    textLight: "#9BA1A6",
+    textExtraLight: "#6C757D",
+    border: "#2A2D2E",
+    borderLight: "#252829",
+}
+
+const API_BASE_URL = 'http://10.156.181.203:3000'
+
+export function AdminOverviewTab({ onNavigateToReports }: { onNavigateToReports?: () => void }) {
     const { width } = useWindowDimensions()
     const { user } = useAuth()
+    const colorScheme = useColorScheme() ?? 'dark'
+    const isDark = colorScheme === 'dark'
+    
+    // Fetch data from API
+    const { users, loading: usersLoading } = useUsers()
+    const { classes, loading: classesLoading } = useClasses()
+    const { students, loading: studentsLoading, fetchStudents } = useStudents()
+    
+    // State for attendance data
+    const [attendanceStats, setAttendanceStats] = React.useState<AttendanceStats>({ total: 0, present: 0, late: 0, absent: 0 })
+    const [activeStudentsToday, setActiveStudentsToday] = React.useState(0)
+    const [loadingAttendance, setLoadingAttendance] = React.useState(false)
+    const [recentActivities, setRecentActivities] = React.useState<Array<{ id: string; icon: string; text: string; time: string }>>([])
+    const [loadingActivities, setLoadingActivities] = React.useState(false)
+    const [exportingCSV, setExportingCSV] = React.useState(false)
+
+    // Theme-aware colors
+    const themeColors = useMemo(() => ({
+        background: isDark ? darkColors.background : colors.background,
+        card: isDark ? darkColors.card : colors.card,
+        text: isDark ? darkColors.text : colors.text,
+        textLight: isDark ? darkColors.textLight : colors.textLight,
+        textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+        border: isDark ? darkColors.border : colors.border,
+        borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+    }), [isDark])
 
     // Mobile-first columns: 2 on phones, 3 if wide (e.g., landscape/tablet)
     const contentPad = spacing.lg
@@ -32,17 +76,88 @@ export function AdminOverviewTab() {
     const cols = width >= 700 ? 3 : 2
     const itemWidth = Math.floor((width - contentPad * 2 - gutter * (cols - 1)) / cols)
 
-    // Stable, deterministic KPIs (no randomness)
-    const totalUsers = mockUsers.length
-    const totalClasses = mockClasses.length
-    const totalStudents = mockStudents.length
-    const activeStudentsToday = Math.round(totalStudents * 0.72)
+    // Fetch today's attendance statistics
+    React.useEffect(() => {
+        const fetchAttendanceStats = async () => {
+            if (students.length === 0) {
+                setAttendanceStats({ total: 0, present: 0, late: 0, absent: 0 })
+                setActiveStudentsToday(0)
+                return
+            }
+            
+            setLoadingAttendance(true)
+            try {
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const todayStr = today.toISOString().split('T')[0]
+                
+                // Fetch attendance for all students (batch requests for better performance)
+                // Limit to reasonable batch size to avoid overwhelming the API
+                const batchSize = 10
+                let presentCount = 0
+                let lateCount = 0
+                let absentCount = 0
+                let processedCount = 0
+                
+                // Process students in batches
+                for (let i = 0; i < students.length; i += batchSize) {
+                    const batch = students.slice(i, i + batchSize)
+                    const batchPromises = batch.map(async (student) => {
+                        try {
+                            const response = await fetch(`${API_BASE_URL}/api/students/${student.id}/attendance?month=${today.getMonth() + 1}&year=${today.getFullYear()}`)
+                            if (!response.ok) return null
+                            const data = await response.json()
+                            // Find today's attendance
+                            const todayRecord = data.attendance?.find((record: any) => record.date === todayStr)
+                            return todayRecord
+                        } catch (err) {
+                            console.error(`Error fetching attendance for student ${student.id}:`, err)
+                            return null
+                        }
+                    })
+                    
+                    const batchResults = await Promise.all(batchPromises)
+                    batchResults.forEach((record: any) => {
+                        if (record) {
+                            processedCount++
+                            if (record.status === 'present') presentCount++
+                            else if (record.status === 'late') lateCount++
+                            else if (record.status === 'absent') absentCount++
+                        }
+                    })
+                }
+                
+                // Calculate stats
+                const total = students.length
+                // Students without attendance records for today are considered absent
+                const studentsWithoutRecords = total - processedCount
+                
+                setAttendanceStats({ 
+                    total, 
+                    present: presentCount, 
+                    late: lateCount, 
+                    absent: absentCount + studentsWithoutRecords
+                })
+                setActiveStudentsToday(presentCount + lateCount)
+            } catch (err) {
+                console.error('Error fetching attendance stats:', err)
+                // Set default stats on error
+                setAttendanceStats({ total: students.length, present: 0, late: 0, absent: students.length })
+                setActiveStudentsToday(0)
+            } finally {
+                setLoadingAttendance(false)
+            }
+        }
+        
+        if (students.length > 0) {
+            fetchAttendanceStats()
+        }
+    }, [students])
 
-    // Attendance summary
-    const present = Math.min(totalStudents, Math.round(totalStudents * 0.78))
-    const late = Math.round(present * 0.07)
-    const absent = Math.max(0, totalStudents - present)
-    const attendanceStats: AttendanceStats = { total: totalStudents, present, late, absent }
+    // Calculate KPIs from real data
+    const totalUsers = users.length
+    const totalClasses = classes.length
+    const totalStudents = students.length
 
     // Helpers
     const chunk = <T,>(arr: readonly T[], size: number) => {
@@ -52,9 +167,11 @@ export function AdminOverviewTab() {
     }
     const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
 
-    const presentRate = pct(present + late, attendanceStats.total)
-    const lateRate = pct(late, attendanceStats.total)
-    const absentRate = pct(absent, attendanceStats.total)
+    const presentRate = attendanceStats.total > 0 ? pct(attendanceStats.present + attendanceStats.late, attendanceStats.total) : 0
+    const lateRate = attendanceStats.total > 0 ? pct(attendanceStats.late, attendanceStats.total) : 0
+    const absentRate = attendanceStats.total > 0 ? pct(attendanceStats.absent, attendanceStats.total) : 0
+    
+    const loading = usersLoading || classesLoading || studentsLoading || loadingAttendance
 
     const kpis = [
         { key: "users", title: "Total Users", value: totalUsers, icon: "users" as const, color: colors.primary, subtitle: "Teachers & Admins" },
@@ -70,23 +187,221 @@ export function AdminOverviewTab() {
         { key: "export", icon: "download" as const, label: "Export CSV", onPress: () => console.log("Export CSV") },
     ] as const
 
-    const recentActivities = [
-        { id: "1", icon: "check-circle", text: "John Smith marked attendance for CS-A", time: "2 mins ago" },
-        { id: "2", icon: "user-plus", text: "New student Alice Brown enrolled in CS-A", time: "1 hour ago" },
-        { id: "3", icon: "edit-3", text: "Class Mathematics-B updated by Sarah Johnson", time: "3 hours ago" },
-        { id: "4", icon: "file-text", text: "Report generated for Physics-A attendance", time: "Yesterday" },
-    ] as const
+    // Fetch recent activities
+    React.useEffect(() => {
+        const fetchRecentActivities = async () => {
+            if (students.length === 0 && classes.length === 0) {
+                setRecentActivities([])
+                return
+            }
+            
+            setLoadingActivities(true)
+            try {
+                const activities: Array<{ id: string; icon: string; text: string; time: string }> = []
+                const now = new Date()
+                
+                // Get recent attendance records (last 7 days)
+                const recentAttendancePromises = students.slice(0, 10).map(async (student) => {
+                    try {
+                        const today = new Date()
+                        const month = today.getMonth() + 1
+                        const year = today.getFullYear()
+                        const response = await fetch(`${API_BASE_URL}/api/students/${student.id}/attendance?month=${month}&year=${year}`)
+                        if (response.ok) {
+                            const data = await response.json()
+                            const attendance = data.attendance || []
+                            // Get most recent attendance record
+                            const recent = attendance
+                                .filter((r: any) => {
+                                    const recordDate = new Date(r.date)
+                                    const daysDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60 * 24))
+                                    return daysDiff <= 7 && daysDiff >= 0
+                                })
+                                .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                            
+                            if (recent) {
+                                const recordDate = new Date(recent.date)
+                                const daysDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60 * 24))
+                                const classItem = classes.find(c => c.id === recent.classId)
+                                const className = classItem?.name || 'Unknown Class'
+                                
+                                let timeStr = ''
+                                if (daysDiff === 0) {
+                                    const hoursDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60))
+                                    if (hoursDiff === 0) {
+                                        const minsDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60))
+                                        timeStr = minsDiff <= 1 ? 'Just now' : `${minsDiff} mins ago`
+                                    } else {
+                                        timeStr = hoursDiff === 1 ? '1 hour ago' : `${hoursDiff} hours ago`
+                                    }
+                                } else if (daysDiff === 1) {
+                                    timeStr = 'Yesterday'
+                                } else {
+                                    timeStr = `${daysDiff} days ago`
+                                }
+                                
+                                activities.push({
+                                    id: `attendance-${student.id}-${recent.date}`,
+                                    icon: recent.status === 'present' ? 'check-circle' : recent.status === 'late' ? 'clock' : 'x-circle',
+                                    text: `${student.name} marked ${recent.status} for ${className}`,
+                                    time: timeStr,
+                                })
+                            }
+                        }
+                    } catch (err) {
+                        // Silently fail for individual student fetches
+                    }
+                })
+                
+                await Promise.all(recentAttendancePromises)
+                
+                // Sort by time (most recent first) and limit to 4
+                activities.sort((a, b) => {
+                    const timeA = a.time.includes('Just now') ? 0 : a.time.includes('mins') ? 1 : a.time.includes('hour') ? 2 : a.time.includes('Yesterday') ? 3 : 4
+                    const timeB = b.time.includes('Just now') ? 0 : b.time.includes('mins') ? 1 : b.time.includes('hour') ? 2 : b.time.includes('Yesterday') ? 3 : 4
+                    return timeA - timeB
+                })
+                
+                setRecentActivities(activities.slice(0, 4))
+            } catch (err) {
+                console.error('Error fetching recent activities:', err)
+                setRecentActivities([])
+            } finally {
+                setLoadingActivities(false)
+            }
+        }
+        
+        if (students.length > 0 || classes.length > 0) {
+            fetchRecentActivities()
+        }
+    }, [students, classes])
+
+    // Dynamic styles based on theme
+    const dynamicStyles = useMemo(() => ({
+        container: {
+            ...styles.container,
+            backgroundColor: themeColors.background,
+        },
+        headerBlock: {
+            ...styles.headerBlock,
+            backgroundColor: themeColors.card,
+            borderColor: themeColors.borderLight,
+            shadowOpacity: isDark ? 0.3 : 0.06,
+        },
+        greeting: {
+            ...styles.greeting,
+            color: themeColors.text,
+        },
+        roleBadge: {
+            ...styles.roleBadge,
+            backgroundColor: themeColors.background,
+            borderColor: themeColors.borderLight,
+        },
+        subtitle: {
+            ...styles.subtitle,
+            color: themeColors.textLight,
+        },
+        headerPill: {
+            ...styles.headerPill,
+            backgroundColor: themeColors.background,
+            borderColor: themeColors.borderLight,
+        },
+        headerPillLabel: {
+            ...styles.headerPillLabel,
+            color: themeColors.textLight,
+        },
+        headerPillValue: {
+            ...styles.headerPillValue,
+            color: themeColors.text,
+        },
+        sectionTitle: {
+            ...styles.sectionTitle,
+            color: themeColors.text,
+        },
+        sectionRule: {
+            ...styles.sectionRule,
+            backgroundColor: themeColors.borderLight,
+        },
+        kpiCard: {
+            ...styles.kpiCard,
+            backgroundColor: themeColors.card,
+            borderColor: themeColors.borderLight,
+        },
+        kpiLabel: {
+            ...styles.kpiLabel,
+            color: themeColors.textLight,
+        },
+        kpiChip: {
+            ...styles.kpiChip,
+            backgroundColor: themeColors.borderLight,
+        },
+        kpiChipText: {
+            ...styles.kpiChipText,
+            color: themeColors.textLight,
+        },
+        quickAction: {
+            ...styles.quickAction,
+            backgroundColor: themeColors.card,
+            borderColor: themeColors.borderLight,
+        },
+        quickActionIconWrap: {
+            ...styles.quickActionIconWrap,
+            backgroundColor: themeColors.background,
+            borderColor: themeColors.borderLight,
+        },
+        quickActionLabel: {
+            ...styles.quickActionLabel,
+            color: themeColors.text,
+        },
+        card: {
+            ...styles.card,
+            backgroundColor: themeColors.card,
+            borderColor: themeColors.borderLight,
+        },
+        activityDivider: {
+            ...styles.activityDivider,
+            borderBottomColor: themeColors.borderLight,
+        },
+        activityIconWrap: {
+            ...styles.activityIconWrap,
+            backgroundColor: themeColors.background,
+            borderColor: themeColors.borderLight,
+        },
+        activityText: {
+            ...styles.activityText,
+            color: themeColors.text,
+        },
+        activityTime: {
+            ...styles.activityTime,
+            color: themeColors.textExtraLight,
+        },
+    }), [themeColors, isDark])
+
+    // Show loading state
+    if (loading && totalUsers === 0 && totalClasses === 0 && totalStudents === 0) {
+        return (
+            <ScrollView
+                style={dynamicStyles.container}
+                contentContainerStyle={[styles.scrollContent, { padding: contentPad, paddingBottom: spacing.xxl, alignItems: 'center', justifyContent: 'center', minHeight: 400 }]}
+                showsVerticalScrollIndicator={false}
+            >
+                <Text style={[styles.sectionTitle, { color: themeColors.text, textAlign: 'center', marginTop: spacing.xxl }]}>
+                    Loading dashboard data...
+                </Text>
+            </ScrollView>
+        )
+    }
 
     return (
         <ScrollView
-            style={styles.container}
+            style={dynamicStyles.container}
             contentContainerStyle={[styles.scrollContent, { padding: contentPad, paddingBottom: spacing.xxl }]}
             showsVerticalScrollIndicator={false}
         >
             {/* Header */}
             <View
                 style={[
-                    styles.headerBlock,
+                    dynamicStyles.headerBlock,
                     {
                         padding: spacing.lg,
                         flexDirection: width < 480 ? 'column' : 'row',
@@ -98,33 +413,33 @@ export function AdminOverviewTab() {
             >
                 <View style={styles.headerLeft}>
                     <View style={styles.headerTitleRow}>
-                        <Text style={styles.greeting} numberOfLines={2} accessibilityRole="header">
+                        <Text style={dynamicStyles.greeting} numberOfLines={2} accessibilityRole="header">
                             {`Hello, ${user?.name ?? "Admin"}!`}
                         </Text>
-                        <View style={styles.roleBadge}>
+                        <View style={dynamicStyles.roleBadge}>
                             <Feather name="shield" size={14} color={colors.primary} />
                             <Text style={styles.roleBadgeText}>Administrator</Text>
                         </View>
                     </View>
-                    <Text style={styles.subtitle} numberOfLines={2}>
+                    <Text style={dynamicStyles.subtitle} numberOfLines={2}>
                         Here&apos;s what&apos;s happening across your school today.
                     </Text>
                 </View>
 
                 <View style={[styles.headerRight, width < 480 && { width: '100%', justifyContent: 'flex-start' }]}>
-                    <HeaderPill icon="calendar" label="Today" value={formatDate(new Date())} />
+                    <HeaderPill icon="calendar" label="Today" value={formatDate(new Date())} themeColors={themeColors} />
                     <HeaderPill 
                     icon="activity" 
                     label="Active" 
                     value={`${activeStudentsToday}`}
-                    
+                    themeColors={themeColors}
                     />
                 </View>
             </View>
 
             {/* System Statistics - rock solid 2/3 column grid */}
             <View style={styles.section}>
-                <SectionHeader title="System Statistics" />
+                <SectionHeader title="System Statistics" themeColors={themeColors} />
                 {chunk(kpis, cols).map((row, rowIdx) => (
                     <View key={`kpi-row-${rowIdx}`} style={[styles.row, { marginBottom: gutter }]}>
                         {row.map((kpi, colIdx) => {
@@ -148,6 +463,12 @@ export function AdminOverviewTab() {
                                         color={kpi.color}
                                         subtitle={kpi.subtitle}
                                         compact
+                                        themeColors={{
+                                            card: themeColors.card,
+                                            text: themeColors.text,
+                                            textLight: themeColors.textLight,
+                                            borderLight: themeColors.borderLight,
+                                        }}
                                     />
                                 </View>
                             )
@@ -158,68 +479,66 @@ export function AdminOverviewTab() {
 
             {/* KPI Highlights - horizontal scroll to avoid wrapping on phones */}
             <View style={styles.section}>
-                <SectionHeader title="Today's Highlights" />
+                <SectionHeader title="Today's Highlights" themeColors={themeColors} />
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{ paddingHorizontal: 2 }}
                 >
                     <View style={[styles.highlightItem, { marginRight: gutter }]}>
-                        <KpiHighlight icon="percent" label="Attendance Rate" value={`${presentRate}%`} chipLabel="Today" color={colors.primary} />
+                        <KpiHighlight icon="percent" label="Attendance Rate" value={`${presentRate}%`} chipLabel="Today" color={colors.primary} themeColors={themeColors} isDark={isDark} />
                     </View>
                     <View style={[styles.highlightItem, { marginRight: gutter }]}>
-                        <KpiHighlight icon="clock" label="Late Rate" value={`${lateRate}%`} chipLabel="Today" color={colors.statusLate} />
+                        <KpiHighlight icon="clock" label="Late Rate" value={`${lateRate}%`} chipLabel="Today" color={colors.statusLate} themeColors={themeColors} isDark={isDark} />
                     </View>
                     <View style={[styles.highlightItem, { marginRight: 0 }]}>
-                        <KpiHighlight icon="alert-triangle" label="Absences" value={`${absentRate}%`} chipLabel="Today" color={colors.statusAbsent} />
+                        <KpiHighlight icon="alert-triangle" label="Absences" value={`${absentRate}%`} chipLabel="Today" color={colors.statusAbsent} themeColors={themeColors} isDark={isDark} />
                     </View>
                 </ScrollView>
             </View>
 
-            {/* Quick Actions - same stable grid as KPIs */}
-            <View style={styles.section}>
-                <SectionHeader title="Quick Actions" />
-                {chunk(actions, cols).map((row, rowIdx) => (
-                    <View key={`act-row-${rowIdx}`} style={[styles.row, { marginBottom: gutter }]}>
-                        {row.map((a, colIdx) => {
-                            const isLast = colIdx === row.length - 1
-                            return (
-                                <View
-                                    key={a.key}
-                                    style={[
-                                        styles.cell,
-                                        {
-                                            width: itemWidth,
-                                            marginRight: isLast ? 0 : gutter,
-                                            marginBottom: 0,
-                                        },
-                                    ]}
-                                >
-                                    <QuickAction icon={a.icon} label={a.label} onPress={a.onPress} />
-                                </View>
-                            )
-                        })}
-                    </View>
-                ))}
-            </View>
+           
 
             {/* Attendance Summary */}
             <View style={styles.section}>
-                <SectionHeader title="Attendance Summary" />
-                <View style={styles.card}>
+                <SectionHeader title="Attendance Summary" themeColors={themeColors} />
+                <View style={dynamicStyles.card}>
                     <AttendanceChart stats={attendanceStats} title="Summary" />
                     <View style={styles.attendanceCtas}>
                         <Button
                             title="View Reports"
                             variant="outline"
-                            onPress={() => console.log("Navigate to Reports")}
+                            onPress={() => {
+                                if (onNavigateToReports) {
+                                    onNavigateToReports()
+                                }
+                            }}
                             style={{ ...styles.attendanceCta, marginRight: spacing.sm } as any}
                         />
                         <Button
-                            title="Export CSV"
+                            title={exportingCSV ? "Exporting..." : "Export CSV"}
                             variant="primary"
-                            onPress={() => console.log("Export CSV")}
+                            onPress={async () => {
+                                if (exportingCSV) return
+                                
+                                setExportingCSV(true)
+                                try {
+                                    const csvContent = await generateOverallAttendanceReport(students, classes)
+                                    const fileUri = await saveAndShareReport(csvContent, 'attendance-summary')
+                                    if (fileUri) {
+                                        Alert.alert('Success', 'Attendance summary has been exported and is ready to share.')
+                                    } else {
+                                        Alert.alert('Success', 'Attendance summary has been exported. File saved to device.')
+                                    }
+                                } catch (error) {
+                                    console.error('Error exporting CSV:', error)
+                                    Alert.alert('Error', 'Failed to export attendance summary. Please try again.')
+                                } finally {
+                                    setExportingCSV(false)
+                                }
+                            }}
                             style={styles.attendanceCta}
+                            disabled={exportingCSV}
                         />
                     </View>
                 </View>
@@ -228,7 +547,7 @@ export function AdminOverviewTab() {
             {/* Recent Activities */}
             <View style={styles.section}>
                 <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                    <Text style={styles.sectionTitle}>Recent Activities</Text>
+                    <Text style={dynamicStyles.sectionTitle}>Recent Activities</Text>
                     <View style={{ flex: 1 }} />
                     <TouchableOpacity
                         onPress={() => console.log("See all activity")}
@@ -238,29 +557,39 @@ export function AdminOverviewTab() {
                         <Text style={styles.linkText}>See all</Text>
                     </TouchableOpacity>
                 </View>
-                <View style={[styles.card, styles.activityList]}>
-                    {recentActivities.map((activity, idx) => (
+                <View style={[dynamicStyles.card, styles.activityList]}>
+                    {loadingActivities ? (
+                        <View style={styles.activityItem}>
+                            <Text style={[styles.activityText, { color: themeColors.textLight }]}>Loading activities...</Text>
+                        </View>
+                    ) : recentActivities.length === 0 ? (
+                        <View style={styles.activityItem}>
+                            <Text style={[styles.activityText, { color: themeColors.textLight }]}>No recent activities</Text>
+                        </View>
+                    ) : (
+                        recentActivities.map((activity: { id: string; icon: string; text: string; time: string }, idx: number) => (
                         <View
                             key={activity.id}
-                            style={[styles.activityItem, idx !== recentActivities.length - 1 && styles.activityDivider]}
+                            style={[styles.activityItem, idx !== recentActivities.length - 1 && dynamicStyles.activityDivider]}
                             accessible
                             accessibilityRole="text"
                             accessibilityLabel={`${activity.text}, ${activity.time}`}
                         >
-                            <View style={styles.activityIconWrap}>
+                            <View style={dynamicStyles.activityIconWrap}>
                                 <Feather name={activity.icon} size={16} color={colors.primary} />
                             </View>
                             <View style={styles.activityTextContainer}>
-                                <Text style={styles.activityText} numberOfLines={2}>
+                                <Text style={dynamicStyles.activityText} numberOfLines={2}>
                                     {activity.text}
                                 </Text>
                                 <View style={styles.activityMetaRow}>
-                                    <Feather name="clock" size={12} color={colors.textExtraLight} />
-                                    <Text style={styles.activityTime}>{activity.time}</Text>
+                                    <Feather name="clock" size={12} color={themeColors.textExtraLight} />
+                                    <Text style={dynamicStyles.activityTime}>{activity.time}</Text>
                                 </View>
                             </View>
                         </View>
-                    ))}
+                    ))
+                    )}
                 </View>
             </View>
         </ScrollView>
@@ -278,13 +607,13 @@ function formatDate(d: Date) {
     }
 }
 
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({ title, themeColors }: { title: string; themeColors: any }) {
     return (
         <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle} numberOfLines={1}>
+            <Text style={[styles.sectionTitle, { color: themeColors.text }]} numberOfLines={1}>
                 {title}
             </Text>
-            <View style={styles.sectionRule} />
+            <View style={[styles.sectionRule, { backgroundColor: themeColors.borderLight }]} />
         </View>
     )
 }
@@ -293,18 +622,20 @@ function HeaderPill({
     icon,
     label,
     value,
+    themeColors,
 }: {
     icon: React.ComponentProps<typeof Feather>["name"]
     label: string
     value: string | number
+    themeColors: any
 }) {
     return (
-        <View style={styles.headerPill}>
-            <Feather name={icon} size={14} color={colors.textLight} />
-            <Text style={styles.headerPillLabel} numberOfLines={1}>
+        <View style={[styles.headerPill, { backgroundColor: themeColors.background, borderColor: themeColors.borderLight }]}>
+            <Feather name={icon} size={14} color={themeColors.textLight} />
+            <Text style={[styles.headerPillLabel, { color: themeColors.textLight }]} numberOfLines={1}>
                 {label}
             </Text>
-            <Text style={styles.headerPillValue} numberOfLines={1}>
+            <Text style={[styles.headerPillValue, { color: themeColors.text }]} numberOfLines={1}>
                 {String(value)}
             </Text>
         </View>
@@ -315,23 +646,25 @@ function QuickAction({
     icon,
     label,
     onPress,
+    themeColors,
 }: {
     icon: React.ComponentProps<typeof Feather>["name"]
     label: string
     onPress?: () => void
+    themeColors: any
 }) {
     return (
         <TouchableOpacity
-            style={styles.quickAction}
+            style={[styles.quickAction, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}
             onPress={onPress}
             activeOpacity={0.9}
             accessibilityRole="button"
             accessibilityLabel={label}
         >
-            <View style={styles.quickActionIconWrap}>
+            <View style={[styles.quickActionIconWrap, { backgroundColor: themeColors.background, borderColor: themeColors.borderLight }]}>
                 <Feather name={icon} size={20} color={colors.primary} />
             </View>
-            <Text style={styles.quickActionLabel} numberOfLines={1}>
+            <Text style={[styles.quickActionLabel, { color: themeColors.text }]} numberOfLines={1}>
                 {label}
             </Text>
         </TouchableOpacity>
@@ -344,21 +677,25 @@ function KpiHighlight({
     value,
     chipLabel,
     color,
+    themeColors,
+    isDark,
 }: {
     icon: React.ComponentProps<typeof Feather>["name"]
     label: string
     value: string
     chipLabel?: string
     color?: string
+    themeColors: any
+    isDark: boolean
 }) {
     const txtColor = color || colors.primary
     return (
-        <View style={styles.kpiCard}>
-            <View style={[styles.kpiIconWrap, { backgroundColor: `${txtColor}15` }]}>
+        <View style={[styles.kpiCard, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}>
+            <View style={[styles.kpiIconWrap, { backgroundColor: isDark ? `${txtColor}20` : `${txtColor}15` }]}>
                 <Feather name={icon} size={18} color={txtColor} />
             </View>
             <View style={{ flex: 1 }}>
-                <Text style={styles.kpiLabel} numberOfLines={1}>
+                <Text style={[styles.kpiLabel, { color: themeColors.textLight }]} numberOfLines={1}>
                     {label}
                 </Text>
                 <Text style={[styles.kpiValue, { color: txtColor }]} numberOfLines={1}>
@@ -366,8 +703,8 @@ function KpiHighlight({
                 </Text>
             </View>
             {chipLabel ? (
-                <View style={styles.kpiChip}>
-                    <Text style={styles.kpiChipText} numberOfLines={1}>
+                <View style={[styles.kpiChip, { backgroundColor: themeColors.borderLight }]}>
+                    <Text style={[styles.kpiChipText, { color: themeColors.textLight }]} numberOfLines={1}>
                         {chipLabel}
                     </Text>
                 </View>
@@ -388,7 +725,6 @@ const cardBase: ViewStyle = {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.background,
     },
     scrollContent: {},
 
@@ -396,7 +732,6 @@ const styles = StyleSheet.create({
     headerBlock: {
         ...cardBase,
         shadowColor: "#000",
-        shadowOpacity: 0.06,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
         elevation: 2,
@@ -416,7 +751,6 @@ const styles = StyleSheet.create({
         fontSize: fonts.sizes.xl,
         fontFamily: fonts.regular,
         fontWeight: Number(fonts.weights.bold) as any,
-        color: colors.text,
     },
     roleBadge: {
         flexDirection: "row",
@@ -425,9 +759,7 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         paddingHorizontal: spacing.sm,
         borderRadius: 999,
-        backgroundColor: colors.background,
         borderWidth: 1,
-        borderColor: colors.borderLight,
     },
     roleBadgeText: {
         fontSize: fonts.sizes.sm,
@@ -438,7 +770,6 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: fonts.sizes.md,
         fontFamily: fonts.regular,
-        color: colors.textLight,
     },
     headerRight: {
         marginTop: spacing.md,
@@ -453,9 +784,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: spacing.sm,
         borderRadius: spacing.sm,
-        backgroundColor: colors.background,
         borderWidth: 1,
-        borderColor: colors.borderLight,
         minWidth: 140,
         flexGrow: 0,
         overflow: 'hidden',
@@ -463,7 +792,6 @@ const styles = StyleSheet.create({
     headerPillLabel: {
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
-        color: colors.textLight,
         flexShrink: 1,
         minWidth: 0,
     },
@@ -471,7 +799,6 @@ const styles = StyleSheet.create({
         marginLeft: "auto",
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
-        color: colors.text,
         fontWeight: Number(fonts.weights.semibold) as any,
         maxWidth: "50%",
         flexShrink: 1,
@@ -492,11 +819,9 @@ const styles = StyleSheet.create({
         fontSize: fonts.sizes.lg,
         fontFamily: fonts.regular,
         fontWeight: Number(fonts.weights.semibold) as any,
-        color: colors.text,
     },
     sectionRule: {
         height: 1,
-        backgroundColor: colors.borderLight,
         flex: 1,
     },
     linkText: {
@@ -537,7 +862,6 @@ const styles = StyleSheet.create({
     kpiLabel: {
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
-        color: colors.textLight,
         marginBottom: spacing.xs / 2,
     },
     kpiValue: {
@@ -549,12 +873,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.sm,
         paddingVertical: spacing.xs / 2,
         borderRadius: 999,
-        backgroundColor: colors.borderLight,
     },
     kpiChipText: {
         fontSize: fonts.sizes.xs,
         fontFamily: fonts.regular,
-        color: colors.textLight,
     },
 
     // Quick Actions
@@ -568,16 +890,13 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: colors.background,
         borderWidth: 1,
-        borderColor: colors.borderLight,
         alignItems: "center",
         justifyContent: "center",
     },
     quickActionLabel: {
         fontSize: fonts.sizes.sm,
         fontFamily: fonts.regular,
-        color: colors.text,
         fontWeight: Number(fonts.weights.semibold) as any,
         textAlign: "center",
     },
@@ -609,7 +928,6 @@ const styles = StyleSheet.create({
     },
     activityDivider: {
         borderBottomWidth: 1,
-        borderBottomColor: colors.borderLight,
     },
     activityIconWrap: {
         width: 28,
@@ -617,9 +935,7 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.background,
         borderWidth: 1,
-        borderColor: colors.borderLight,
         marginRight: spacing.sm,
         marginTop: 2,
     },
@@ -629,7 +945,6 @@ const styles = StyleSheet.create({
     activityText: {
         fontSize: fonts.sizes.md,
         fontFamily: fonts.regular,
-        color: colors.text,
     },
     activityMetaRow: {
         flexDirection: "row",
@@ -640,6 +955,5 @@ const styles = StyleSheet.create({
     activityTime: {
         fontSize: fonts.sizes.xs,
         fontFamily: fonts.regular,
-        color: colors.textExtraLight,
     },
 })

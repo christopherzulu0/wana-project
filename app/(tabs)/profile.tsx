@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../../components/Avatar";
@@ -12,11 +12,34 @@ import { colors } from "../../constants/Colors";
 import { fonts } from "../../constants/fonts";
 import { spacing } from "../../constants/spacing";
 import { useAuth } from "../../hooks/useAuth";
+import { useColorScheme } from "../../hooks/useColorScheme";
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
   
   const handleLogout = () => {
     Alert.alert(
@@ -46,19 +69,19 @@ export default function ProfileScreen() {
     label: string,
     value: string
   ) => (
-    <View style={styles.profileItem}>
+    <View style={[styles.profileItem, { borderBottomColor: themeColors.borderLight }]}>
       <View style={styles.profileItemIcon}>
         <Feather name={icon} size={20} color={colors.primary} />
       </View>
       <View style={styles.profileItemContent}>
-        <Text style={styles.profileItemLabel}>{label}</Text>
-        <Text style={styles.profileItemValue}>{value}</Text>
+        <Text style={[styles.profileItemLabel, { color: themeColors.textLight }]}>{label}</Text>
+        <Text style={[styles.profileItemValue, { color: themeColors.text }]}>{value}</Text>
       </View>
     </View>
   );
   
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <StatusBar />
       <Header title="My Profile" />
       
@@ -74,8 +97,8 @@ export default function ProfileScreen() {
             size={100} 
           />
           
-          <Text style={styles.name}>{user?.name}</Text>
-          <Text style={styles.role}>{user?.role === "teacher" ? "Teacher" : "Administrator"}</Text>
+          <Text style={[styles.name, { color: themeColors.text }]}>{user?.name}</Text>
+          <Text style={[styles.role, { color: themeColors.textLight }]}>{user?.role === "teacher" ? "Teacher" : "Administrator"}</Text>
         </View>
         
         <Card style={styles.infoCard}>
@@ -85,31 +108,31 @@ export default function ProfileScreen() {
         </Card>
         
         <View style={styles.menuSection}>
-          <Text style={styles.sectionTitle}>Settings</Text>
+          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Settings</Text>
           
           <Card style={styles.menuCard}>
-            <TouchableOpacity style={styles.menuItem}>
-              <Feather name="bell" size={20} color={colors.text} />
-              <Text style={styles.menuItemText}>Notifications</Text>
-              <Feather name="chevron-right" size={20} color={colors.textLight} />
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: themeColors.borderLight }]}>
+              <Feather name="bell" size={20} color={themeColors.text} />
+              <Text style={[styles.menuItemText, { color: themeColors.text }]}>Notifications</Text>
+              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: themeColors.borderLight }]}>
+              <Feather name="lock" size={20} color={themeColors.text} />
+              <Text style={[styles.menuItemText, { color: themeColors.text }]}>Privacy & Security</Text>
+              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: themeColors.borderLight }]}>
+              <Feather name="help-circle" size={20} color={themeColors.text} />
+              <Text style={[styles.menuItemText, { color: themeColors.text }]}>Help & Support</Text>
+              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.menuItem}>
-              <Feather name="lock" size={20} color={colors.text} />
-              <Text style={styles.menuItemText}>Privacy & Security</Text>
-              <Feather name="chevron-right" size={20} color={colors.textLight} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.menuItem}>
-              <Feather name="help-circle" size={20} color={colors.text} />
-              <Text style={styles.menuItemText}>Help & Support</Text>
-              <Feather name="chevron-right" size={20} color={colors.textLight} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.menuItem}>
-              <Feather name="info" size={20} color={colors.text} />
-              <Text style={styles.menuItemText}>About</Text>
-              <Feather name="chevron-right" size={20} color={colors.textLight} />
+              <Feather name="info" size={20} color={themeColors.text} />
+              <Text style={[styles.menuItemText, { color: themeColors.text }]}>About</Text>
+              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
             </TouchableOpacity>
           </Card>
         </View>
@@ -137,7 +160,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
@@ -153,15 +175,13 @@ const styles = StyleSheet.create({
   name: {
     fontSize: fonts.sizes.xl,
     fontFamily: fonts.regular,
-    fontWeight: '700', // changed from fonts.weights.bold
-    color: colors.text,
+    fontWeight: '700',
     marginTop: spacing.md,
     marginBottom: spacing.xs / 2,
   },
   role: {
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
-    color: colors.textLight,
   },
   infoCard: {
     marginBottom: spacing.xl,
@@ -171,7 +191,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
   },
   profileItemIcon: {
     width: 40,
@@ -188,13 +207,11 @@ const styles = StyleSheet.create({
   profileItemLabel: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.textLight,
     marginBottom: spacing.xs / 2,
   },
   profileItemValue: {
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
-    color: colors.text,
   },
   menuSection: {
     marginBottom: spacing.xl,
@@ -202,8 +219,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: fonts.sizes.lg,
     fontFamily: fonts.regular,
-    fontWeight: '600', // changed from fonts.weights.semibold
-    color: colors.text,
+    fontWeight: '600',
     marginBottom: spacing.md,
   },
   menuCard: {
@@ -214,13 +230,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
   },
   menuItemText: {
     flex: 1,
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
-    color: colors.text,
     marginLeft: spacing.md,
   },
   logoutButton: {

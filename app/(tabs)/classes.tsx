@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ClassCard } from "../../components/ClassCard";
@@ -10,14 +10,37 @@ import { StatusBar } from "../../components/StatusBar";
 import { colors } from "../../constants/Colors";
 import { spacing } from "../../constants/spacing";
 import { useAuth } from "../../hooks/useAuth";
+import { useColorScheme } from "../../hooks/useColorScheme";
 import { useClasses } from "../../hooks/useClasses";
 import { Class } from "../../types";
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 export default function ClassesScreen() {
   const { user } = useAuth();
   const { getClassesForTeacher, classes, loading, error } = useClasses();
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
   
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
   
   // Debug logging
   console.log('ClassesScreen - Current user:', user);
@@ -41,7 +64,7 @@ export default function ClassesScreen() {
   // Show loading state
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <StatusBar />
         <Header title="My Classes" />
         <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -58,7 +81,7 @@ export default function ClassesScreen() {
   // Show error state
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <StatusBar />
         <Header title="My Classes" />
         <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -75,7 +98,7 @@ export default function ClassesScreen() {
   // Show message for non-teacher users
   if (user && user.role !== 'teacher') {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <StatusBar />
         <Header title="My Classes" />
         <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -102,7 +125,7 @@ export default function ClassesScreen() {
   );
   
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <StatusBar />
       <Header title="My Classes" />
       
@@ -112,11 +135,12 @@ export default function ClassesScreen() {
             placeholder="Search classes..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            leftIcon={<Feather name="search" size={20} color={colors.textLight} />}
+            themeColors={themeColors}
+            leftIcon={<Feather name="search" size={20} color={themeColors.textLight} />}
             rightIcon={
               searchQuery ? (
                 <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <Feather name="x" size={20} color={colors.textLight} />
+                  <Feather name="x" size={20} color={themeColors.textLight} />
                 </TouchableOpacity>
               ) : undefined
             }
@@ -139,7 +163,6 @@ export default function ClassesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   content: {
     flex: 1,

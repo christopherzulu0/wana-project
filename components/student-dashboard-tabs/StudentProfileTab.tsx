@@ -1,7 +1,7 @@
 "use client"
 
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Modal } from "react-native"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
@@ -13,17 +13,42 @@ import { useRouter } from "expo-router"
 import { FaceEnrollment } from "../FaceEnrollment"
 import { Card } from "../Card"
 import { mockStudents } from "../../utils/mockData"
+import { useColorScheme } from "../../hooks/useColorScheme"
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  textExtraLight: "#6C757D",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 export function StudentProfileTab() {
   const { user, logout } = useAuth()
   const { enrollFace, getFaceStatus, loading: faceLoading } = useFaceEnrollment()
   const router = useRouter()
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
   
   const [showFaceEnrollment, setShowFaceEnrollment] = useState(false)
   const [faceEnrolled, setFaceEnrolled] = useState(false)
   
   // Find the logged-in student
   const student = mockStudents.find((s) => s.id === user?.id) || mockStudents[0]
+
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
 
   const handleLogout = () => {
     Alert.alert(
@@ -76,7 +101,7 @@ export function StudentProfileTab() {
     {
       icon: 'phone' as const,
       label: 'Phone',
-      value: user?.phone || 'Not provided',
+      value: (user as any)?.phone || 'Not provided',
     },
     {
       icon: 'calendar' as const,
@@ -84,6 +109,76 @@ export function StudentProfileTab() {
       value: user?.id || 'N/A',
     },
   ]
+
+  // Dynamic styles based on theme
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    scrollContent: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xxl,
+    },
+    userName: {
+      fontSize: fonts.sizes.xl,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.bold as any,
+      color: themeColors.text,
+      marginTop: spacing.md,
+      marginBottom: spacing.xs,
+    },
+    userRole: {
+      fontSize: fonts.sizes.md,
+      fontFamily: fonts.regular,
+      color: themeColors.text,
+      backgroundColor: `${colors.primary}20`,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: spacing.lg,
+    },
+    sectionTitle: {
+      fontSize: fonts.sizes.lg,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.semibold as any,
+      color: themeColors.text,
+      marginBottom: spacing.md,
+    },
+    profileItem: {
+      backgroundColor: themeColors.card,
+      borderRadius: spacing.md,
+      padding: spacing.md,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: themeColors.borderLight,
+    },
+    profileItemLabel: {
+      fontSize: fonts.sizes.sm,
+      fontFamily: fonts.regular,
+      color: themeColors.textLight,
+      marginBottom: spacing.xs / 2,
+    },
+    profileItemValue: {
+      fontSize: fonts.sizes.md,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.medium as any,
+      color: themeColors.text,
+    },
+    actionItem: {
+      backgroundColor: themeColors.card,
+      borderRadius: spacing.md,
+      padding: spacing.md,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: themeColors.borderLight,
+    },
+    actionItemLabel: {
+      fontSize: fonts.sizes.md,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.medium as any,
+      color: themeColors.text,
+    },
+  }), [themeColors])
 
   const actionItems = [
     {
@@ -127,12 +222,12 @@ export function StudentProfileTab() {
       onPress: () => {
         Alert.alert('Help & Support', 'For assistance, please contact your administrator or teacher.')
       },
-      color: colors.info,
+      color: colors.primary,
     },
   ]
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={dynamicStyles.container as any} contentContainerStyle={dynamicStyles.scrollContent as any}>
       {/* Profile Header */}
       <View style={styles.profileHeader}>
         <Avatar 
@@ -140,22 +235,22 @@ export function StudentProfileTab() {
           name={user?.name} 
           size={80} 
         />
-        <Text style={styles.userName}>{user?.name}</Text>
-        <Text style={styles.userRole}>Student</Text>
+        <Text style={dynamicStyles.userName as any}>{user?.name}</Text>
+        <Text style={dynamicStyles.userRole as any}>Student</Text>
       </View>
 
       {/* Profile Information */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Profile Information</Text>
+        <Text style={dynamicStyles.sectionTitle as any}>Profile Information</Text>
         {profileItems.map((item, index) => (
-          <View key={index} style={styles.profileItem}>
+          <View key={index} style={[styles.profileItemBase, dynamicStyles.profileItem] as any}>
             <View style={styles.profileItemLeft}>
               <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}15` }]}>
                 <Feather name={item.icon} size={20} color={colors.primary} />
               </View>
               <View style={styles.profileItemContent}>
-                <Text style={styles.profileItemLabel}>{item.label}</Text>
-                <Text style={styles.profileItemValue}>{item.value}</Text>
+                <Text style={dynamicStyles.profileItemLabel as any}>{item.label}</Text>
+                <Text style={dynamicStyles.profileItemValue as any}>{item.value}</Text>
               </View>
             </View>
           </View>
@@ -164,16 +259,16 @@ export function StudentProfileTab() {
 
       {/* Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Actions</Text>
+        <Text style={dynamicStyles.sectionTitle as any}>Actions</Text>
         {actionItems.map((item, index) => (
-          <TouchableOpacity key={index} style={styles.actionItem} onPress={item.onPress}>
+          <TouchableOpacity key={index} style={[styles.actionItemBase, dynamicStyles.actionItem] as any} onPress={item.onPress}>
             <View style={styles.actionItemLeft}>
               <View style={[styles.iconContainer, { backgroundColor: `${item.color}15` }]}>
                 <Feather name={item.icon} size={20} color={item.color} />
               </View>
-              <Text style={styles.actionItemLabel}>{item.label}</Text>
+              <Text style={dynamicStyles.actionItemLabel as any}>{item.label}</Text>
             </View>
-            <Feather name="chevron-right" size={20} color={colors.textLight} />
+            <Feather name="chevron-right" size={20} color={themeColors.textLight} />
           </TouchableOpacity>
         ))}
       </View>
@@ -182,7 +277,7 @@ export function StudentProfileTab() {
       <View style={styles.section}>
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Feather name="log-out" size={20} color={colors.card} />
-          <Text style={styles.logoutButtonText}>Logout</Text>
+          <Text style={styles.logoutButtonText as any}>Logout</Text>
         </TouchableOpacity>
       </View>
 
@@ -202,53 +297,19 @@ export function StudentProfileTab() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
   profileHeader: {
     alignItems: 'center',
     marginBottom: spacing.xl,
     paddingVertical: spacing.lg,
   },
-  userName: {
-    fontSize: fonts.sizes.xl,
-    fontFamily: fonts.regular,
-    fontWeight: fonts.weights.bold,
-    color: colors.text,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  userRole: {
-    fontSize: fonts.sizes.md,
-    fontFamily: fonts.regular,
-    color: colors.textLight,
-    backgroundColor: colors.primary + '20',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: spacing.lg,
-  },
   section: {
     marginBottom: spacing.xl,
   },
-  sectionTitle: {
-    fontSize: fonts.sizes.lg,
-    fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  profileItem: {
-    backgroundColor: colors.card,
+  profileItemBase: {
     borderRadius: spacing.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.borderLight,
   },
   profileItemLeft: {
     flexDirection: 'row',
@@ -265,38 +326,18 @@ const styles = StyleSheet.create({
   profileItemContent: {
     flex: 1,
   },
-  profileItemLabel: {
-    fontSize: fonts.sizes.sm,
-    fontFamily: fonts.regular,
-    color: colors.textLight,
-    marginBottom: spacing.xs / 2,
-  },
-  profileItemValue: {
-    fontSize: fonts.sizes.md,
-    fontFamily: fonts.regular,
-    fontWeight: fonts.weights.medium,
-    color: colors.text,
-  },
-  actionItem: {
+  actionItemBase: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.card,
     borderRadius: spacing.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.borderLight,
   },
   actionItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  actionItemLabel: {
-    fontSize: fonts.sizes.md,
-    fontFamily: fonts.regular,
-    fontWeight: fonts.weights.medium,
-    color: colors.text,
   },
   logoutButton: {
     flexDirection: 'row',
@@ -316,7 +357,7 @@ const styles = StyleSheet.create({
     color: colors.card,
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
+    fontWeight: fonts.weights.semibold as any,
     marginLeft: spacing.sm,
   },
 })

@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import { Feather } from "@expo/vector-icons"
+import { usePathname, useRouter } from "expo-router"
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import {
     Alert,
@@ -18,6 +19,7 @@ import { fonts } from "../../constants/fonts"
 import { spacing } from "../../constants/spacing"
 import { useClasses } from "../../hooks/useClasses"
 import { useUsers } from "../../hooks/useUsers"
+import { useColorScheme } from "../../hooks/useColorScheme"
 import type { Class, User } from "../../types"
 import { mockClasses, updateMockClass } from "../../utils/mockData"
 import { Avatar } from "../Avatar"
@@ -27,17 +29,43 @@ import { EmptyState } from "../EmptyState"
 import { Input } from "../Input"
 import { UserFormModal } from "../UserFormModal"
 
+// Dark mode color palette
+const darkColors = {
+    background: "#151718",
+    card: "#1F2324",
+    text: "#ECEDEE",
+    textLight: "#9BA1A6",
+    textExtraLight: "#6C757D",
+    border: "#2A2D2E",
+    borderLight: "#252829",
+}
+
 type Role = "teacher" | "admin" | "student"
 type RoleFilter = "all" | Role
 type SortKey = "name" | "email" | "role"
 type SortDir = "asc" | "desc"
 
 export function UserManagementTab() {
+    const router = useRouter()
+    const pathname = usePathname()
     const { width } = useWindowDimensions()
     const { users, loading, error, addUser, updateUser, deleteUser, refetch } = useUsers()
     const { getAllClasses } = useClasses()
     const classes = getAllClasses()
     const classSearchHelper = useClassSearch()
+    const colorScheme = useColorScheme() ?? 'dark'
+    const isDark = colorScheme === 'dark'
+
+    // Theme-aware colors
+    const themeColors = useMemo(() => ({
+        background: isDark ? darkColors.background : colors.background,
+        card: isDark ? darkColors.card : colors.card,
+        text: isDark ? darkColors.text : colors.text,
+        textLight: isDark ? darkColors.textLight : colors.textLight,
+        textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+        border: isDark ? darkColors.border : colors.border,
+        borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+    }), [isDark])
 
     // UI state
     const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
@@ -46,11 +74,7 @@ export function UserManagementTab() {
     const [sortKey, setSortKey] = useState<SortKey>("name")
     const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-    // Selection and detail state
-    const [selectedUser, setSelectedUser] = useState<User | null>(null)
-    const [selectedRole, setSelectedRole] = useState<Role | null>(null)
-    const [selectedTeacherClassIds, setSelectedTeacherClassIds] = useState<string[]>([])
-    const [selectedStudentClassIdByUser, setSelectedStudentClassIdByUser] = useState<Record<string, string | null>>({})
+    // Selection state (for bulk operations only)
 
     // Bulk selection
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -65,6 +89,32 @@ export function UserManagementTab() {
 
     const [isBulkAssignModalOpen, setIsBulkAssignModalOpen] = useState(false)
     const [bulkClassIds, setBulkClassIds] = useState<string[]>([])
+
+    // Track previous pathname to detect navigation back from assign screen
+    const prevPathname = useRef<string | null>(null)
+    const lastRefetchTime = useRef<number>(0)
+
+    // Refetch users when returning from assign screen
+    // This ensures data is fresh after CRUD operations
+    useEffect(() => {
+        // Check if we navigated back from /user/[id]/assign to admin dashboard
+        const wasOnAssignScreen = prevPathname.current?.includes('/user/') && prevPathname.current?.includes('/assign')
+        const isNowOnDashboard = pathname?.includes('admin-dashboard') || pathname === '/admin-dashboard'
+
+        if (wasOnAssignScreen && isNowOnDashboard) {
+            // Small delay to ensure navigation is complete
+            const now = Date.now()
+            if (now - lastRefetchTime.current > 500) {
+                lastRefetchTime.current = now
+                setTimeout(() => {
+                    refetch()
+                }, 100)
+            }
+        }
+
+        // Update previous pathname
+        prevPathname.current = pathname || null
+    }, [pathname, refetch])
 
     // Debounce search
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -136,29 +186,12 @@ export function UserManagementTab() {
     }
 
     const handleSelectUser = (user: User) => {
-        setSelectedUser(user)
-        setSelectedRole(user.role as Role)
-        const teacherClassIds =
-            classes.filter((cls) => cls.teacherId === user.id).map((cls) => cls.id) || []
-        setSelectedTeacherClassIds(teacherClassIds)
-        setSelectedStudentClassIdByUser((prev) => ({
-            ...prev,
-            [user.id]: prev[user.id] ?? null,
-        }))
-    }
-
-    const toggleTeacherClass = (classId: string) => {
-        setSelectedTeacherClassIds((prev) =>
-            prev.includes(classId) ? prev.filter((id) => id !== classId) : [...prev, classId],
-        )
-    }
-
-    const assignStudentClass = (classId: string) => {
-        if (!selectedUser) return
-        setSelectedStudentClassIdByUser((prev) => ({
-            ...prev,
-            [selectedUser.id]: classId,
-        }))
+        if (!user) return
+        // Navigate to assign roles and classes screen
+        router.push({
+            pathname: "/user/[id]/assign",
+            params: { id: user.id }
+        } as any)
     }
 
     const clearTeacherAssignmentsFor = (userId: string) => {
@@ -171,41 +204,6 @@ export function UserManagementTab() {
             }
             updateMockClass(updated)
         })
-    }
-
-    const applyChanges = async () => {
-        if (!selectedUser || !selectedRole) return
-
-        try {
-            const updatedUser: User = { ...selectedUser, role: selectedRole }
-            await updateUser(updatedUser)
-
-            if (selectedRole === "teacher") {
-                clearTeacherAssignmentsFor(selectedUser.id)
-                selectedTeacherClassIds.forEach((classId) => {
-                    const cls = classes.find((c) => c.id === classId)
-                    if (cls) {
-                        const updated: Class = {
-                            ...cls,
-                            teacherId: selectedUser.id,
-                            teacherName: selectedUser.name,
-                        }
-                        updateMockClass(updated)
-                    }
-                })
-                Alert.alert("Success", "Role and class assignments updated for the teacher.")
-            } else if (selectedRole === "student") {
-                const sel = selectedStudentClassIdByUser[selectedUser.id]
-                if (sel) {
-                    Alert.alert("Saved", `Assigned student to class ID: ${sel} (demo state only)`)
-                } else {
-                    Alert.alert("Saved", "Role updated to Student. No class assigned.")
-                }
-            }
-        } catch (error) {
-            Alert.alert("Error", "Failed to update user. Please try again.")
-            console.error('Error updating user:', error)
-        }
     }
 
     const handleAddUser = () => {
@@ -227,7 +225,6 @@ export function UserManagementTab() {
                 onPress: async () => {
                     try {
                         await deleteUser(user.id)
-                        if (selectedUser?.id === user.id) setSelectedUser(null)
                         setSelectedIds((prev) => {
                             const n = new Set(prev)
                             n.delete(user.id)
@@ -337,11 +334,16 @@ export function UserManagementTab() {
 
     const renderUserItem = ({ item }: { item: User }) => {
         const isSelected = selectedIds.has(item.id)
-        const isFocused = selectedUser?.id === item.id
 
         return (
             <TouchableOpacity
-                style={[styles.userRow, isFocused && styles.userRowSelected]}
+                style={[
+                    styles.userRow,
+                    {
+                        backgroundColor: themeColors.card,
+                        borderColor: themeColors.border,
+                    }
+                ]}
                 activeOpacity={0.85}
                 onPress={() => handleSelectUser(item)}
             >
@@ -354,17 +356,17 @@ export function UserManagementTab() {
                     <Feather
                         name={isSelected ? "check-square" : "square"}
                         size={20}
-                        color={isSelected ? colors.primary : colors.textLight}
+                        color={isSelected ? colors.primary : themeColors.textLight}
                     />
                 </TouchableOpacity>
 
                 <Avatar source={item.avatar} name={item.name} size={48} />
 
                 <View style={styles.userInfo}>
-                    <Text numberOfLines={1} style={styles.userName}>
+                    <Text numberOfLines={1} style={[styles.userName, { color: themeColors.text }]}>
                         {item.name}
                     </Text>
-                    <Text numberOfLines={1} style={styles.userEmail}>
+                    <Text numberOfLines={1} style={[styles.userEmail, { color: themeColors.textLight }]}>
                         {item.email}
                     </Text>
                     <View style={styles.userMeta}>
@@ -373,273 +375,139 @@ export function UserManagementTab() {
                 </View>
 
                 <View style={styles.rowActions}>
-                    <TouchableOpacity onPress={() => handleEditUser(item)} style={styles.iconBtn}>
+                    <TouchableOpacity 
+                        onPress={(e) => {
+                            e.stopPropagation()
+                            handleEditUser(item)
+                        }} 
+                        style={styles.iconBtn}
+                    >
                         <Feather name="edit" size={18} color={colors.primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteUser(item)} style={styles.iconBtn}>
+                    <TouchableOpacity 
+                        onPress={(e) => {
+                            e.stopPropagation()
+                            handleDeleteUser(item)
+                        }} 
+                        style={styles.iconBtn}
+                    >
                         <Feather name="trash-2" size={18} color={colors.danger} />
                     </TouchableOpacity>
-                    <Feather name="chevron-right" size={18} color={colors.textLight} />
+                    <Feather name="chevron-right" size={18} color={themeColors.textLight} />
                 </View>
             </TouchableOpacity>
         )
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: themeColors.background }]}>
             {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.title}>Users</Text>
+            <View style={[styles.header, { backgroundColor: themeColors.card, borderBottomColor: themeColors.border, paddingTop: spacing.lg }]}>
+                <Text style={[styles.title, { color: themeColors.text }]}>Users</Text>
                 <Button title="Add User" onPress={handleAddUser} variant="primary" size="small" />
             </View>
-
-            {/* Stats chips */}
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.statsRow, { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl }]}
-                style={styles.statsScrollView}
-                bounces={false}
-                decelerationRate="fast"
-            >
-                <StatChip icon="users" label="All" value={stats.total} active={roleFilter === "all"} onPress={() => setRoleFilter("all")} />
-                <StatChip icon="briefcase" label="Teachers" value={stats.teachers} active={roleFilter === "teacher"} onPress={() => setRoleFilter("teacher")} />
-                <StatChip icon="user" label="Students" value={stats.students} active={roleFilter === "student"} onPress={() => setRoleFilter("student")} />
-                <StatChip icon="shield" label="Admins" value={stats.admins} active={roleFilter === "admin"} onPress={() => setRoleFilter("admin")} />
-            </ScrollView>
-
-            {/* Search + Sort */}
-            <View style={styles.toolsContainer}>
-                <View style={styles.searchContainer}>
-                    <Input
-                        placeholder="Search by name, email, or role"
-                        value={search}
-                        onChangeText={setSearch}
-                        leftIcon={<Feather name="search" size={18} color={colors.textLight} />}
-                        style={styles.searchInput}
-                    />
-                </View>
-                <View style={styles.sortContainer}>
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
-                        contentContainerStyle={styles.sortRow}
-                        style={styles.sortScrollView}
+            
+            <View style={styles.scrollableContent}>
+                {/* Stats chips */}
+                <View style={[styles.statsContainer, { backgroundColor: themeColors.background }]}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.statsRow}
+                        style={styles.statsScrollView}
+                        bounces={false}
+                        decelerationRate="fast"
                     >
-                        <SortChip
-                            label={`Name ${sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}`}
-                            active={sortKey === "name"}
-                            onPress={() => toggleSort("name")}
-                        />
-                        <SortChip
-                            label={`Email ${sortKey === "email" ? (sortDir === "asc" ? "↑" : "↓") : ""}`}
-                            active={sortKey === "email"}
-                            onPress={() => toggleSort("email")}
-                        />
-                        <SortChip
-                            label={`Role ${sortKey === "role" ? (sortDir === "asc" ? "↑" : "↓") : ""}`}
-                            active={sortKey === "role"}
-                            onPress={() => toggleSort("role")}
-                        />
+                        <StatChip icon="users" label="All" value={stats.total} active={roleFilter === "all"} onPress={() => setRoleFilter("all")} themeColors={themeColors} />
+                        <StatChip icon="briefcase" label="Teachers" value={stats.teachers} active={roleFilter === "teacher"} onPress={() => setRoleFilter("teacher")} themeColors={themeColors} />
+                        <StatChip icon="user" label="Students" value={stats.students} active={roleFilter === "student"} onPress={() => setRoleFilter("student")} themeColors={themeColors} />
+                        <StatChip icon="shield" label="Admins" value={stats.admins} active={roleFilter === "admin"} onPress={() => setRoleFilter("admin")} themeColors={themeColors} />
                     </ScrollView>
                 </View>
-            </View>
 
-            {/* Bulk actions bar */}
-            {hasSelection && (
-                <Card variant="outlined" style={styles.bulkBar}>
-                    <View style={styles.bulkLeft}>
-                        <Text style={styles.bulkText}>{selectedIds.size} selected</Text>
-                        <TouchableOpacity onPress={selectAll} style={styles.bulkLink}>
-                            <Text style={styles.bulkLinkText}>Select all</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.bulkDivider}>•</Text>
-                        <TouchableOpacity onPress={clearSelection} style={styles.bulkLink}>
-                            <Text style={styles.bulkLinkText}>Clear</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bulkActions}>
-                        <Button title="Set Role" onPress={() => setIsBulkRoleModalOpen(true)}  size="small" />
-                        <Button title="Assign Classes" onPress={() => setIsBulkAssignModalOpen(true)} variant="secondary" size="small" />
-                        <Button title="Unassign" onPress={applyBulkUnassignTeacherClasses} variant="secondary" size="small" />
-                        <Button title="Delete" onPress={bulkDelete} variant="outline" size="small" />
-                    </ScrollView>
-                </Card>
-            )}
-
-            {/* Assign Panel (single user) */}
-            <Card style={width < 420 ? [styles.assignPanel, styles.assignPanelCompact] : styles.assignPanel}>
-                <Text style={styles.panelTitle}>Assign Roles & Classes</Text>
-                {!selectedUser ? (
-                    <View style={styles.emptyStateWrap}>
-                        <EmptyState
-                            title="No user selected"
-                            message="Select a user from the list to manage their role and class assignments."
-                            icon="users"
+                {/* Search + Sort */}
+                <View style={[styles.toolsContainer, { backgroundColor: themeColors.background }]}>
+                    <View style={styles.searchContainer}>
+                        <Input
+                            placeholder="Search by name, email, or role"
+                            value={search}
+                            onChangeText={setSearch}
+                            leftIcon={<Feather name="search" size={18} color={themeColors.textLight} />}
+                            style={styles.searchInput}
+                            themeColors={themeColors}
                         />
                     </View>
-                ) : (
-                    <View style={[styles.panelContent, width < 420 && styles.panelContentCompact]}>
-                        <View style={[styles.personHeader, width < 420 && styles.personHeaderCompact]}>
-                            <Avatar source={selectedUser.avatar} name={selectedUser.name} size={width < 420 ? 44 : 56} />
-                            <View style={[styles.personInfo, width < 420 && styles.personInfoCompact]}>
-                                <Text numberOfLines={2} style={styles.personName}>{selectedUser.name}</Text>
-                                <Text numberOfLines={2} style={styles.personEmail}>{selectedUser.email}</Text>
-                                <View style={{ marginTop: spacing.xs }}>
-                                    <RoleBadge role={selectedUser.role} />
-                                </View>
-                            </View>
-                            <TouchableOpacity onPress={() => setSelectedUser(null)} style={styles.clearBtn}>
-                                <Feather name="x" size={20} color={colors.textLight} />
+                    <View style={styles.sortContainer}>
+                        <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false} 
+                            contentContainerStyle={styles.sortRow}
+                            style={styles.sortScrollView}
+                            bounces={false}
+                        >
+                            <SortChip
+                                label={`Name ${sortKey === "name" ? (sortDir === "asc" ? "↑" : "↓") : ""}`}
+                                active={sortKey === "name"}
+                                onPress={() => toggleSort("name")}
+                                themeColors={themeColors}
+                            />
+                            <SortChip
+                                label={`Email ${sortKey === "email" ? (sortDir === "asc" ? "↑" : "↓") : ""}`}
+                                active={sortKey === "email"}
+                                onPress={() => toggleSort("email")}
+                                themeColors={themeColors}
+                            />
+                            <SortChip
+                                label={`Role ${sortKey === "role" ? (sortDir === "asc" ? "↑" : "↓") : ""}`}
+                                active={sortKey === "role"}
+                                onPress={() => toggleSort("role")}
+                                themeColors={themeColors}
+                            />
+                        </ScrollView>
+                    </View>
+                </View>
+
+                {/* Bulk actions bar */}
+                {hasSelection && (
+                    <Card variant="outlined" style={styles.bulkBar}>
+                        <View style={styles.bulkLeft}>
+                            <Text style={[styles.bulkText, { color: themeColors.text }]}>{selectedIds.size} selected</Text>
+                            <TouchableOpacity onPress={selectAll} style={styles.bulkLink}>
+                                <Text style={styles.bulkLinkText}>Select all</Text>
+                            </TouchableOpacity>
+                            <Text style={styles.bulkDivider}>•</Text>
+                            <TouchableOpacity onPress={clearSelection} style={styles.bulkLink}>
+                                <Text style={styles.bulkLinkText}>Clear</Text>
                             </TouchableOpacity>
                         </View>
-
-                        {/* Role Selector */}
-                        <Text style={styles.sectionLabel}>Role</Text>
-                        <View style={[styles.roleRow, width < 420 && styles.wrapRow]}>
-                            {(["teacher", "admin", "student"] as Role[]).map((role) => {
-                                const active = selectedRole === role
-                                return (
-                                    <TouchableOpacity
-                                        key={role}
-                                        style={[styles.roleChip, active && styles.roleChipActive]}
-                                        onPress={() => setSelectedRole(role)}
-                                    >
-                                        <Feather
-                                            name={
-                                                role === "teacher"
-                                                    ? "briefcase"
-                                                    : role === "admin"
-                                                        ? "shield"
-                                                        : "user"
-                                            }
-                                            size={18}
-                                          
-                                            color={active ? colors.card : colors.text}
-                                        />
-                                        <Text
-                                            style={[
-                                                styles.roleChipText,
-                                                active && styles.roleChipTextActive,
-                                            ]}
-                                            numberOfLines={1}
-                                        >
-                                            {role.charAt(0).toUpperCase() + role.slice(1)}
-                                        </Text>
-                                    </TouchableOpacity>
-                                )
-                            })}
-                        </View>
-
-                        {/* Class Assignment */}
-                        {selectedRole === "teacher" && (
-                            <>
-                                <Text style={styles.sectionLabel}>Assigned Classes</Text>
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.chipsRow}
-                                >
-                                    {classes.map((cls) => {
-                                        const active = selectedTeacherClassIds.includes(cls.id)
-                                        return (
-                                            <TouchableOpacity
-                                                key={cls.id}
-                                                style={[styles.classChip, active && styles.classChipActive]}
-                                                onPress={() => toggleTeacherClass(cls.id)}
-                                            >
-                                                <Feather
-                                                    name="book"
-                                                    size={16}
-                                                    color={active ? colors.card : colors.text}
-                                                />
-                                                <Text
-                                                    style={[
-                                                        styles.classChipText,
-                                                        active && styles.classChipTextActive,
-                                                    ]}
-                                                    numberOfLines={1}
-                                                >
-                                                    {cls.name} ({cls.section})
-                                                </Text>
-                                            </TouchableOpacity>
-                                        )
-                                    })}
-                                </ScrollView>
-                            </>
-                        )}
-
-                        {selectedRole === "student" && (
-                            <>
-                                <Text style={styles.sectionLabel}>Assign Class (Single)</Text>
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    contentContainerStyle={styles.chipsRow}
-                                >
-                                    {classes.map((cls) => {
-                                        const active =
-                                            selectedStudentClassIdByUser[selectedUser.id] === cls.id
-                                        return (
-                                            <TouchableOpacity
-                                                key={cls.id}
-                                                style={[styles.classChip, active && styles.classChipActive]}
-                                                onPress={() => assignStudentClass(cls.id)}
-                                            >
-                                                <Feather
-                                                    name="book"
-                                                    size={16}
-                                                    color={active ? colors.card : colors.text}
-                                                />
-                                                <Text
-                                                    style={[
-                                                        styles.classChipText,
-                                                        active && styles.classChipTextActive,
-                                                    ]}
-                                                    numberOfLines={1}
-                                                >
-                                                    {cls.name} ({cls.section})
-                                                </Text>
-                                            </TouchableOpacity>
-                                        )
-                                    })}
-                                </ScrollView>
-                                <Text style={styles.hintText}>
-                                    This is a design prototype. Student assignment is stored locally in this screen. In a real app, you’d create/update a Student record.
-                                </Text>
-                            </>
-                        )}
-
-                        {selectedRole === "admin" && (
-                            <Text style={styles.hintText}>
-                                Admins don’t have class assignments. Changing a teacher to admin will unassign them from their classes.
-                            </Text>
-                        )}
-
-                        <View style={styles.panelFooter}>
-                            <Button title="Apply Changes" onPress={applyChanges} variant="primary" style={{ flex: 1 }} />
-                        </View>
-                    </View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bulkActions}>
+                            <Button title="Set Role" onPress={() => setIsBulkRoleModalOpen(true)}  size="small" />
+                            <Button title="Assign Classes" onPress={() => setIsBulkAssignModalOpen(true)} variant="secondary" size="small" />
+                            <Button title="Unassign" onPress={applyBulkUnassignTeacherClasses} variant="secondary" size="small" />
+                            <Button title="Delete" onPress={bulkDelete} variant="outline" size="small" />
+                        </ScrollView>
+                    </Card>
                 )}
-            </Card>
 
-            {/* Users List */}
-            <FlatList
-                data={filteredUsers}
-                keyExtractor={(item) => item.id}
-                renderItem={renderUserItem}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    <EmptyState
-                        title="No Users Found"
-                        message="Try adjusting your search or add a new user."
-                        icon="users"
-                        actionLabel="Add New User"
-                        onAction={handleAddUser}
-                    />
-                }
-            />
+                {/* Users List */}
+                <FlatList
+                    data={filteredUsers}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderUserItem}
+                    contentContainerStyle={styles.listContent}
+                    style={styles.list}
+                    showsVerticalScrollIndicator={true}
+                    ListEmptyComponent={
+                        <EmptyState
+                            title="No Users Found"
+                            message="Try adjusting your search or add a new user."
+                            icon="users"
+                            actionLabel="Add New User"
+                            onAction={handleAddUser}
+                        />
+                    }
+                />
+            </View>
 
             {/* Add/Edit User Modal */}
             <UserFormModal
@@ -670,11 +538,11 @@ export function UserManagementTab() {
                 onRequestClose={() => setIsBulkRoleModalOpen(false)}
             >
                 <View style={styles.centeredView}>
-                    <View style={styles.modalView}>
+                    <View style={[styles.modalView, { backgroundColor: themeColors.card }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Set Role for {selectedIds.size} user(s)</Text>
+                            <Text style={[styles.modalTitle, { color: themeColors.text }]}>Set Role for {selectedIds.size} user(s)</Text>
                             <TouchableOpacity onPress={() => setIsBulkRoleModalOpen(false)} style={styles.closeButton}>
-                                <Feather name="x" size={24} color={colors.textLight} />
+                                <Feather name="x" size={24} color={themeColors.textLight} />
                             </TouchableOpacity>
                         </View>
                         <View style={{ gap: spacing.sm }}>
@@ -684,17 +552,26 @@ export function UserManagementTab() {
                                     <TouchableOpacity
                                         key={r}
                                         onPress={() => setBulkRole(r)}
-                                        style={[styles.bulkRow, active && styles.bulkRowActive]}
+                                        style={[
+                                            styles.bulkRow,
+                                            {
+                                                backgroundColor: active ? colors.primary : themeColors.background,
+                                                borderColor: active ? colors.primary : themeColors.border,
+                                            }
+                                        ]}
                                     >
                                         <Feather
                                             name={r === "teacher" ? "briefcase" : r === "admin" ? "shield" : "user"}
                                             size={18}
-                                            color={active ? colors.card : colors.text}
+                                            color={active ? themeColors.card : themeColors.text}
                                         />
-                                        <Text style={[styles.bulkRowText, active && styles.bulkRowTextActive]}>
+                                        <Text style={[
+                                            styles.bulkRowText,
+                                            { color: active ? themeColors.card : themeColors.text }
+                                        ]}>
                                             {r.charAt(0).toUpperCase() + r.slice(1)}
                                         </Text>
-                                        {active && <Feather name="check" size={18} color={colors.card} />}
+                                        {active && <Feather name="check" size={18} color={themeColors.card} />}
                                     </TouchableOpacity>
                                 )
                             })}
@@ -715,11 +592,11 @@ export function UserManagementTab() {
                 onRequestClose={() => setIsBulkAssignModalOpen(false)}
             >
                 <View style={styles.centeredView}>
-                    <View style={styles.modalView}>
+                    <View style={[styles.modalView, { backgroundColor: themeColors.card }]}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Assign Classes to Teachers</Text>
+                            <Text style={[styles.modalTitle, { color: themeColors.text }]}>Assign Classes to Teachers</Text>
                             <TouchableOpacity onPress={() => setIsBulkAssignModalOpen(false)} style={styles.closeButton}>
-                                <Feather name="x" size={24} color={colors.textLight} />
+                                <Feather name="x" size={24} color={themeColors.textLight} />
                             </TouchableOpacity>
                         </View>
 
@@ -727,8 +604,9 @@ export function UserManagementTab() {
                             placeholder="Search classes"
                             value={classSearchHelper.value}
                             onChangeText={classSearchHelper.setValue}
-                            leftIcon={<Feather name="search" size={18} color={colors.textLight} />}
+                            leftIcon={<Feather name="search" size={18} color={themeColors.textLight} />}
                             style={{ marginBottom: spacing.md }}
+                            themeColors={themeColors}
                         />
 
                         <ScrollView style={{ maxHeight: 280 }}>
@@ -737,7 +615,13 @@ export function UserManagementTab() {
                                 return (
                                     <TouchableOpacity
                                         key={cls.id}
-                                        style={[styles.bulkRow, active && styles.bulkRowActive]}
+                                        style={[
+                                            styles.bulkRow,
+                                            {
+                                                backgroundColor: active ? colors.primary : themeColors.background,
+                                                borderColor: active ? colors.primary : themeColors.border,
+                                            }
+                                        ]}
                                         onPress={() =>
                                             setBulkClassIds((prev) =>
                                                 prev.includes(cls.id)
@@ -746,10 +630,13 @@ export function UserManagementTab() {
                                             )
                                         }
                                     >
-                                        <Text style={[styles.bulkRowText, active && styles.bulkRowTextActive]}>
+                                        <Text style={[
+                                            styles.bulkRowText,
+                                            { color: active ? themeColors.card : themeColors.text }
+                                        ]}>
                                             {cls.name} ({cls.section})
                                         </Text>
-                                        {active && <Feather name="check" size={18} color={colors.card} />}
+                                        {active && <Feather name="check" size={18} color={themeColors.card} />}
                                     </TouchableOpacity>
                                 )
                             })}
@@ -780,40 +667,63 @@ function useClassSearch() {
 }
 
 // Helper components
-function StatChip({ icon, label, value, active, onPress }: {
+function StatChip({ icon, label, value, active, onPress, themeColors }: {
     icon: string
     label: string
     value: number
     active: boolean
     onPress: () => void
+    themeColors: any
 }) {
     return (
         <TouchableOpacity
-            style={[styles.statChip, active && styles.statChipActive]}
+            style={[
+                styles.statChip,
+                {
+                    backgroundColor: active ? colors.primary : themeColors.card,
+                    borderColor: active ? colors.primary : themeColors.border,
+                }
+            ]}
             onPress={onPress}
         >
-            <Feather name={icon as any} size={16} color={active ? colors.card : colors.text} />
-            <Text style={[styles.statChipLabel, active && styles.statChipLabelActive]}>
+            <Feather name={icon as any} size={16} color={active ? themeColors.card : themeColors.text} />
+            <Text style={[
+                styles.statChipLabel,
+                { color: active ? themeColors.card : themeColors.text }
+            ]}>
                 {label}
             </Text>
-            <Text style={[styles.statChipValue, active && styles.statChipValueActive]}>
+            <Text style={[
+                styles.statChipValue,
+                { color: active ? themeColors.card : themeColors.text }
+            ]}>
                 {value}
             </Text>
         </TouchableOpacity>
     )
 }
 
-function SortChip({ label, active, onPress }: {
+function SortChip({ label, active, onPress, themeColors }: {
     label: string
     active: boolean
     onPress: () => void
+    themeColors: any
 }) {
     return (
         <TouchableOpacity
-            style={[styles.sortChip, active && styles.sortChipActive]}
+            style={[
+                styles.sortChip,
+                {
+                    backgroundColor: active ? colors.primary : themeColors.card,
+                    borderColor: active ? colors.primary : themeColors.border,
+                }
+            ]}
             onPress={onPress}
         >
-            <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
+            <Text style={[
+                styles.sortChipText,
+                { color: active ? themeColors.card : themeColors.text }
+            ]}>
                 {label}
             </Text>
         </TouchableOpacity>
@@ -849,7 +759,10 @@ function RoleBadge({ role }: { role: string }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.background,
+    },
+    scrollableContent: {
+        flex: 1,
+        minHeight: 0,
     },
     header: {
         flexDirection: "row",
@@ -857,46 +770,41 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.md,
-        backgroundColor: colors.card,
-        borderBottomColor: colors.border,
+        borderBottomWidth: 1,
     },
     title: {
         fontSize: 24,
         fontFamily: fonts.bold,
         fontWeight: Number(fonts.weights.bold) as any,
-        color: colors.text,
+    },
+    statsContainer: {
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
     },
     statsScrollView: {
         flexGrow: 0,
-        paddingTop:4,
-        paddingBottom: 22,
     },
     statsRow: {
         gap: spacing.sm,
         flexDirection: 'row',
         alignItems: 'center',
-        flexGrow: 0,
-        flexShrink: 0,
-        paddingVertical: spacing.lg,
+        paddingRight: spacing.lg,
     },
     statChip: {
         flexDirection: "row",
         alignItems: "center",
-        paddingHorizontal: spacing.sm,
+        paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        marginVertical:50,
-        backgroundColor: colors.card,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: colors.border,
         gap: spacing.xs,
         minHeight: 44,
-        minWidth: 120,
-        maxWidth: 150,
+        minWidth: 100,
+        maxWidth: 140,
         justifyContent: "center",
         flexShrink: 0,
         overflow: 'hidden',
-        shadowColor: colors.text,
+        shadowColor: "#000",
         shadowOffset: {
             width: 0,
             height: 1,
@@ -905,43 +813,27 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 2,
     },
-    statChipActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-    },
     statChipLabel: {
         fontSize: 14,
         fontFamily: fonts.medium,
         fontWeight: Number(fonts.weights.medium) as any,
-        color: colors.text,
-    },
-    statChipLabelActive: {
-        color: colors.card,
     },
     statChipValue: {
         fontSize: 14,
         fontFamily: fonts.bold,
         fontWeight: Number(fonts.weights.bold) as any,
-        color: colors.text,
-    },
-    statChipValueActive: {
-        color: colors.card,
     },
     toolsContainer: {
         paddingHorizontal: spacing.lg,
+        paddingTop: spacing.sm,
         paddingBottom: spacing.md,
-        gap: spacing.sm,
-        minHeight: 60,
-        backgroundColor: colors.background,
+        gap: spacing.md,
     },
     searchContainer: {
         width: "100%",
-        minHeight: 50,
-        justifyContent: "center",
     },
     searchInput: {
-        flex: 1,
-        minWidth: 0,
+        width: "100%",
     },
     sortContainer: {
         width: "100%",
@@ -951,27 +843,21 @@ const styles = StyleSheet.create({
     },
     sortRow: {
         gap: spacing.xs,
+        paddingRight: spacing.lg,
     },
     sortChip: {
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        backgroundColor: colors.card,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: colors.border,
-    },
-    sortChipActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
+        minHeight: 40,
+        justifyContent: "center",
+        alignItems: "center",
     },
     sortChipText: {
         fontSize: 14,
         fontFamily: fonts.medium,
         fontWeight: Number(fonts.weights.medium) as any,
-        color: colors.text,
-    },
-    sortChipTextActive: {
-        color: colors.card,
     },
     bulkBar: {
         flexDirection: "row",
@@ -991,7 +877,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontFamily: fonts.medium,
         fontWeight: Number(fonts.weights.medium) as any,
-        color: colors.text,
     },
     bulkLink: {
         paddingVertical: spacing.xs,
@@ -1020,7 +905,6 @@ const styles = StyleSheet.create({
     panelTitle: {
         fontSize: 18,
         fontFamily: fonts.bold,
-        color: colors.text,
         marginBottom: spacing.lg,
     },
     emptyStateWrap: {
@@ -1054,12 +938,10 @@ const styles = StyleSheet.create({
     personName: {
         fontSize: 16,
         fontFamily: fonts.bold,
-        color: colors.text,
     },
     personEmail: {
         fontSize: 14,
         fontFamily: fonts.regular,
-        color: colors.textLight,
         marginTop: spacing.xs,
     },
     clearBtn: {
@@ -1073,7 +955,6 @@ const styles = StyleSheet.create({
     sectionLabel: {
         fontSize: 16,
         fontFamily: fonts.semibold,
-        color: colors.text,
         marginBottom: spacing.sm,
     },
     roleRow: {
@@ -1090,29 +971,19 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        backgroundColor: colors.card,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: colors.border,
         gap: spacing.xs,
         minHeight: 44,
         minWidth: 100,
         justifyContent: "center",
         flexShrink: 0,
     },
-    roleChipActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-    },
     roleChipText: {
         fontSize: 14,
         fontFamily: fonts.medium,
-        color: colors.text,
         flexShrink: 1,
         textAlign: "center",
-    },
-    roleChipTextActive: {
-        color: colors.card,
     },
     chipsRow: {
         gap: spacing.sm,
@@ -1124,28 +995,17 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        backgroundColor: colors.card,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: colors.border,
         gap: spacing.xs,
-    },
-    classChipActive: {
-        backgroundColor: colors.success,
-        borderColor: colors.success,
     },
     classChipText: {
         fontSize: 14,
         fontFamily: fonts.medium,
-        color: colors.text,
-    },
-    classChipTextActive: {
-        color: colors.card,
     },
     hintText: {
         fontSize: 12,
         fontFamily: fonts.regular,
-        color: colors.textLight,
         fontStyle: "italic",
     },
     panelFooter: {
@@ -1156,6 +1016,10 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         minHeight: 50,
     },
+    list: {
+        flex: 1,
+        minHeight: 0,
+    },
     listContent: {
         paddingHorizontal: spacing.lg,
         paddingBottom: spacing.xl,
@@ -1165,15 +1029,18 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
-        backgroundColor: colors.card,
         borderRadius: 12,
         marginBottom: spacing.sm,
         borderWidth: 1,
-        borderColor: colors.border,
-    },
-    userRowSelected: {
-        borderColor: colors.primary,
-        backgroundColor: colors.primary + "10",
+        minHeight: 80,
+        elevation: 2,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
     checkbox: {
         marginRight: spacing.md,
@@ -1185,12 +1052,10 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 16,
         fontFamily: fonts.semibold,
-        color: colors.text,
     },
     userEmail: {
         fontSize: 14,
         fontFamily: fonts.regular,
-        color: colors.textLight,
         marginTop: spacing.xs,
     },
     userMeta: {
@@ -1213,6 +1078,9 @@ const styles = StyleSheet.create({
     iconBtn: {
         padding: spacing.sm,
     },
+    selectButton: {
+        padding: spacing.sm,
+    },
     centeredView: {
         flex: 1,
         justifyContent: "center",
@@ -1220,7 +1088,6 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(0, 0, 0, 0.5)",
     },
     modalView: {
-        backgroundColor: colors.card,
         borderRadius: 20,
         padding: spacing.lg,
         width: "90%",
@@ -1236,7 +1103,6 @@ const styles = StyleSheet.create({
     modalTitle: {
         fontSize: 18,
         fontFamily: fonts.bold,
-        color: colors.text,
         flex: 1,
     },
     closeButton: {
@@ -1256,23 +1122,13 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
-        backgroundColor: colors.background,
         borderRadius: 8,
         marginBottom: spacing.sm,
         borderWidth: 1,
-        borderColor: colors.border,
-    },
-    bulkRowActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
     },
     bulkRowText: {
         fontSize: 14,
         fontFamily: fonts.medium,
-        color: colors.text,
         flex: 1,
-    },
-    bulkRowTextActive: {
-        color: colors.card,
     },
 })

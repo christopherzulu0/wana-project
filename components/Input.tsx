@@ -31,6 +31,15 @@ interface InputProps {
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   multiline?: boolean;
   numberOfLines?: number;
+  themeColors?: {
+    background?: string;
+    card?: string;
+    text?: string;
+    textLight?: string;
+    textExtraLight?: string;
+    border?: string;
+    borderLight?: string;
+  };
 }
 
 export const Input = ({
@@ -50,6 +59,7 @@ export const Input = ({
   autoCapitalize = "none",
   multiline = false,
   numberOfLines = 1,
+  themeColors,
 }: InputProps) => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   
@@ -57,12 +67,25 @@ export const Input = ({
     setIsPasswordVisible(!isPasswordVisible);
   };
   
+  const inputThemeColors = {
+    card: themeColors?.card || colors.card,
+    text: themeColors?.text || colors.text,
+    textLight: themeColors?.textLight || colors.textLight,
+    textExtraLight: themeColors?.textExtraLight || colors.textExtraLight,
+    border: themeColors?.border || colors.border,
+    borderLight: themeColors?.borderLight || colors.borderLight,
+  };
+  
   return (
     <View style={[styles.container, style]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {label && <Text style={[styles.label, { color: inputThemeColors.text }]}>{label}</Text>}
       
       <View style={[
         styles.inputContainer,
+        {
+          backgroundColor: inputThemeColors.card,
+          borderColor: error ? colors.danger : inputThemeColors.border,
+        },
         error ? styles.inputError : null,
         disabled ? styles.inputDisabled : null,
       ]}>
@@ -71,6 +94,7 @@ export const Input = ({
         <TextInput
           style={[
             styles.input,
+            { color: inputThemeColors.text },
             leftIcon ? styles.inputWithLeftIcon : null,
             (rightIcon || secureTextEntry) ? styles.inputWithRightIcon : null,
             inputStyle,
@@ -84,7 +108,7 @@ export const Input = ({
           autoCapitalize={autoCapitalize}
           multiline={multiline}
           numberOfLines={numberOfLines}
-          placeholderTextColor={colors.textExtraLight}
+          placeholderTextColor={inputThemeColors.textExtraLight}
         />
         
         {secureTextEntry && (
@@ -95,7 +119,7 @@ export const Input = ({
             <Feather
               name={isPasswordVisible ? "eye-off" : "eye"}
               size={20}
-              color={colors.textLight}
+              color={inputThemeColors.textLight}
             />
           </TouchableOpacity>
         )}
@@ -117,16 +141,13 @@ const styles = StyleSheet.create({
   label: {
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    color: colors.text,
     marginBottom: spacing.xs,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: spacing.sm,
-    backgroundColor: colors.card,
   },
   input: {
     flex: 1,
@@ -134,7 +155,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     fontSize: fonts.sizes.md,
     fontFamily: fonts.regular,
-    color: colors.text,
   },
   inputWithLeftIcon: {
     paddingLeft: spacing.xs,

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import type { Class } from "../types"
 
-const API_BASE_URL = 'http://10.59.131.203:3000';
+const API_BASE_URL = 'http://10.156.181.203:3000';
 
 interface ApiResponse<T> {
   success: boolean

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,20 @@ import { Student } from '../types';
 import { CreateStudentData, UpdateStudentData } from '../hooks/useStudents';
 import { colors } from '../constants/Colors';
 import { spacing } from '../constants/spacing';
+import { useColorScheme } from '../hooks/useColorScheme';
 import { Input } from './Input';
 import { Button } from './Button';
+
+// Dark mode color palette
+const darkColors = {
+    background: "#151718",
+    card: "#1F2324",
+    text: "#ECEDEE",
+    textLight: "#9BA1A6",
+    textExtraLight: "#6C757D",
+    border: "#2A2D2E",
+    borderLight: "#252829",
+}
 
 interface StudentFormModalProps {
   visible: boolean;
@@ -43,6 +55,20 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
   onSubmit,
   loading = false,
 }) => {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -155,19 +181,19 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <View style={[styles.header, { borderBottomColor: themeColors.borderLight }]}>
+          <Text style={[styles.title, { color: themeColors.text }]}>
             {student ? 'Edit Student' : 'Add New Student'}
           </Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={colors.text.primary} />
+            <Ionicons name="close" size={24} color={themeColors.textLight} />
           </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Student Information</Text>
+            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Student Information</Text>
             
             <Input
               label="Full Name *"
@@ -175,6 +201,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
               placeholder="Enter student's full name"
               error={errors.name}
+              themeColors={themeColors}
             />
 
             <Input
@@ -183,6 +210,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               onChangeText={(text) => setFormData(prev => ({ ...prev, registrationNumber: text }))}
               placeholder="Enter registration number (optional)"
               error={errors.registrationNumber}
+              themeColors={themeColors}
             />
 
             <Input
@@ -193,18 +221,19 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               keyboardType="email-address"
               autoCapitalize="none"
               error={errors.email}
+              themeColors={themeColors}
             />
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account Settings</Text>
+            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Account Settings</Text>
             
-            <View style={styles.switchContainer}>
+            <View style={[styles.switchContainer, { backgroundColor: themeColors.borderLight }]}>
               <View style={styles.switchInfo}>
-                <Text style={styles.switchLabel}>
+                <Text style={[styles.switchLabel, { color: themeColors.text }]}>
                   {student?.hasAccount ? 'Update Account' : 'Create Login Account'}
                 </Text>
-                <Text style={styles.switchDescription}>
+                <Text style={[styles.switchDescription, { color: themeColors.textLight }]}>
                   {student?.hasAccount 
                     ? 'Allow updating the existing user account'
                     : 'Allow student to login to the system'
@@ -214,8 +243,8 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               <Switch
                 value={formData.createAccount}
                 onValueChange={handleCreateAccountToggle}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={formData.createAccount ? colors.background.primary : colors.text.secondary}
+                trackColor={{ false: themeColors.border, true: colors.primary }}
+                thumbColor={formData.createAccount ? themeColors.card : themeColors.textLight}
               />
             </View>
 
@@ -223,10 +252,10 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
               <View style={styles.accountFields}>
                 {!student && (
                   <>
-                    <View style={styles.switchContainer}>
+                    <View style={[styles.switchContainer, { backgroundColor: themeColors.borderLight }]}>
                       <View style={styles.switchInfo}>
-                        <Text style={styles.switchLabel}>Auto-Generate Password</Text>
-                        <Text style={styles.switchDescription}>
+                        <Text style={[styles.switchLabel, { color: themeColors.text }]}>Auto-Generate Password</Text>
+                        <Text style={[styles.switchDescription, { color: themeColors.textLight }]}>
                           Automatically create a secure password for the student
                         </Text>
                       </View>
@@ -238,13 +267,13 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                             setErrors(prev => ({ ...prev, password: '' }));
                           }
                         }}
-                        trackColor={{ false: colors.border, true: colors.primary }}
-                        thumbColor={formData.autoGeneratePassword ? colors.background.primary : colors.text.secondary}
+                        trackColor={{ false: themeColors.border, true: colors.primary }}
+                        thumbColor={formData.autoGeneratePassword ? themeColors.card : themeColors.textLight}
                       />
                     </View>
                     
                     {formData.autoGeneratePassword ? (
-                      <View style={styles.passwordNote}>
+                      <View style={[styles.passwordNote, { backgroundColor: colors.warning + '20' }]}>
                         <Ionicons name="key" size={16} color={colors.primary} />
                         <Text style={[styles.passwordNoteText, { color: colors.primary }]}>
                           A secure 8-character password will be generated automatically. You'll see it after creating the student.
@@ -258,15 +287,16 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
                         placeholder="Enter password (min 6 characters)"
                         secureTextEntry
                         error={errors.password}
+                        themeColors={themeColors}
                       />
                     )}
                   </>
                 )}
                 
                 {student && (
-                  <View style={styles.passwordNote}>
+                  <View style={[styles.passwordNote, { backgroundColor: colors.warning + '20' }]}>
                     <Ionicons name="information-circle" size={16} color={colors.warning} />
-                    <Text style={styles.passwordNoteText}>
+                    <Text style={[styles.passwordNoteText, { color: colors.warning }]}>
                       Leave password empty to keep existing password
                     </Text>
                   </View>
@@ -276,7 +306,7 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { borderTopColor: themeColors.borderLight }]}>
           <Button
             title="Cancel"
             onPress={onClose}
@@ -299,7 +329,6 @@ export const StudentFormModal: React.FC<StudentFormModalProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -307,12 +336,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: colors.text.primary,
   },
   closeButton: {
     padding: spacing.sm,
@@ -327,7 +354,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.text.primary,
     marginBottom: spacing.md,
   },
   switchContainer: {
@@ -336,7 +362,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
-    backgroundColor: colors.background.secondary,
     borderRadius: 8,
     marginBottom: spacing.md,
   },
@@ -347,12 +372,10 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '500',
-    color: colors.text.primary,
     marginBottom: spacing.xs,
   },
   switchDescription: {
     fontSize: 14,
-    color: colors.text.secondary,
   },
   accountFields: {
     marginTop: spacing.md,
@@ -361,13 +384,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
-    backgroundColor: colors.warning + '20',
     borderRadius: 8,
     marginTop: spacing.md,
   },
   passwordNoteText: {
     fontSize: 14,
-    color: colors.warning,
     marginLeft: spacing.sm,
     flex: 1,
   },
@@ -375,7 +396,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
     gap: spacing.md,
   },
   cancelButton: {

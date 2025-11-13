@@ -10,15 +10,35 @@ import { useStudentEnrollment } from "../../hooks/useStudentEnrollment"
 import { EmptyState } from "../EmptyState"
 import { Feather } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { useState } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { ClassFaceScanModal } from "../ClassFaceScanModal"
+import { useColorScheme } from "../../hooks/useColorScheme"
+
+const API_BASE_URL = 'http://10.156.181.203:3000'
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  textExtraLight: "#6C757D",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 export function StudentClassesTab() {
   const { user } = useAuth()
   const router = useRouter()
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+  
   const [activeTab, setActiveTab] = useState<'enrolled' | 'available'>('enrolled')
   const [showFaceScanModal, setShowFaceScanModal] = useState(false)
   const [selectedClass, setSelectedClass] = useState<any>(null)
+  const [studentId, setStudentId] = useState<string | null>(null)
+  const [attendanceStatusMap, setAttendanceStatusMap] = useState<Record<string, boolean>>({})
+  const [checkingAttendance, setCheckingAttendance] = useState(false)
   const {
     enrolledClasses,
     availableClasses,
@@ -28,7 +48,85 @@ export function StudentClassesTab() {
     unenrollFromClass,
     isEnrolledInClass,
     getAvailableForEnrollment,
+    fetchEnrolledClasses,
   } = useStudentEnrollment()
+
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
+
+  // Fetch student ID
+  useEffect(() => {
+    const fetchStudentId = async () => {
+      if (!user?.id || user.role !== 'student') return
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/students/by-user/${user.id}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.student?.id) {
+            setStudentId(data.student.id.toString())
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching student ID:', err)
+      }
+    }
+
+    fetchStudentId()
+  }, [user?.id, user?.role])
+
+  // Check attendance status for today for all enrolled classes
+  const checkAttendanceForToday = useCallback(async () => {
+    if (!studentId || enrolledClasses.length === 0) return
+
+    setCheckingAttendance(true)
+    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+    const statusMap: Record<string, boolean> = {}
+
+    try {
+      // Fetch today's attendance for the student
+      const currentMonth = new Date().getMonth() + 1
+      const currentYear = new Date().getFullYear()
+      const response = await fetch(
+        `${API_BASE_URL}/api/students/${studentId}/attendance?month=${currentMonth}&year=${currentYear}`
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        const todayAttendance = data.attendance || []
+        
+        // Check for each enrolled class if attendance is marked for today
+        enrolledClasses.forEach((classItem) => {
+          const hasAttendance = todayAttendance.some(
+            (record: any) => record.date === today && 
+            (record.classId === classItem.id || record.className === classItem.name)
+          )
+          statusMap[classItem.id] = hasAttendance
+        })
+      }
+
+      setAttendanceStatusMap(statusMap)
+    } catch (err) {
+      console.error('Error checking attendance status:', err)
+    } finally {
+      setCheckingAttendance(false)
+    }
+  }, [studentId, enrolledClasses])
+
+  // Check attendance status when student ID or enrolled classes change
+  useEffect(() => {
+    if (studentId && enrolledClasses.length > 0) {
+      checkAttendanceForToday()
+    }
+  }, [studentId, enrolledClasses, checkAttendanceForToday])
 
   const handleEnroll = async (classId: string, className: string) => {
     Alert.alert(
@@ -74,12 +172,29 @@ export function StudentClassesTab() {
   }
 
   const handleMarkAttendance = (classItem: any) => {
+    // Check if attendance is already marked for today
+    if (attendanceStatusMap[classItem.id]) {
+      Alert.alert(
+        'Attendance Already Marked',
+        `You have already marked your attendance for ${classItem.name} today.`,
+        [{ text: 'OK' }]
+      )
+      return
+    }
+
     setSelectedClass(classItem)
     setShowFaceScanModal(true)
   }
 
   const handleFaceScanSuccess = () => {
     Alert.alert('Success', `Attendance marked successfully for ${selectedClass?.name}!`)
+    // Update attendance status for this class
+    if (selectedClass) {
+      setAttendanceStatusMap(prev => ({
+        ...prev,
+        [selectedClass.id]: true
+      }))
+    }
   }
 
   const handleFaceScanClose = () => {
@@ -87,37 +202,91 @@ export function StudentClassesTab() {
     setSelectedClass(null)
   }
 
-  const renderEnrolledClassItem = ({ item }: { item: any }) => (
-    <View>
-      <ClassCard classItem={item} />
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.markAttendanceButton}
-          onPress={() => handleMarkAttendance(item)}
-        >
-          <Feather name="camera" size={20} color={colors.card} />
-          <Text style={styles.markAttendanceButtonText}>Mark Attendance</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-           style={styles.unenrollButton}
-           onPress={() => handleUnenroll(item.id, item.name)}
-         >
-           <Feather name="user-minus" size={20} color={colors.danger} />
-           <Text style={styles.unenrollButtonText}>Unenroll</Text>
-         </TouchableOpacity>
+  const renderEnrolledClassItem = ({ item }: { item: any }) => {
+    const isAttendanceMarked = attendanceStatusMap[item.id] || false
+
+    return (
+      <View style={styles.classItemWrapper}>
+        <View style={[styles.classCardWrapper, dynamicStyles.classCardWrapper]}>
+          <ClassCard classItem={item} />
+          {isAttendanceMarked && (
+            <View style={[styles.attendanceStatusBanner, dynamicStyles.attendanceStatusBanner]}>
+              <Feather name="check-circle" size={14} color={colors.success} />
+              <Text style={[styles.attendanceStatusText, dynamicStyles.attendanceStatusText]}>
+                Attendance Marked Today
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.markAttendanceButton,
+              isAttendanceMarked && styles.markAttendanceButtonDisabled,
+              dynamicStyles.markAttendanceButton
+            ]}
+            onPress={() => handleMarkAttendance(item)}
+            disabled={isAttendanceMarked || checkingAttendance}
+            activeOpacity={0.8}
+          >
+             <View style={[
+               styles.buttonIconWrapper,
+               isAttendanceMarked && styles.buttonIconWrapperSuccess
+             ]}>
+               <Feather 
+                 name={isAttendanceMarked ? "check-circle" : "camera"} 
+                 size={16} 
+                 color={isAttendanceMarked ? colors.success : colors.card} 
+               />
+             </View>
+             <Text style={[
+               styles.markAttendanceButtonText,
+               isAttendanceMarked && styles.markAttendanceButtonTextDisabled
+             ] as any}>
+               {isAttendanceMarked ? "Already Marked" : "Mark Attendance"}
+             </Text>
+             {isAttendanceMarked && (
+               <View style={styles.successBadge}>
+                 <Feather name="check" size={8} color={colors.success} />
+               </View>
+             )}
+          </TouchableOpacity>
+          <TouchableOpacity
+             style={[styles.unenrollButton, dynamicStyles.unenrollButton]}
+             onPress={() => handleUnenroll(item.id, item.name)}
+             activeOpacity={0.8}
+           >
+              <View style={[styles.buttonIconWrapper, styles.buttonIconWrapperDanger]}>
+                <Feather name="user-minus" size={16} color={colors.danger} />
+              </View>
+              <Text style={[styles.unenrollButtonText, dynamicStyles.unenrollButtonText]}>Unenroll</Text>
+           </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  )
+    )
+  }
 
   const renderAvailableClassItem = ({ item }: { item: any }) => (
-    <View>
-      <ClassCard classItem={item} />
+    <View style={styles.classItemWrapper}>
+      <View style={[styles.classCardWrapper, dynamicStyles.classCardWrapper]}>
+        <ClassCard classItem={item} />
+        <View style={[styles.newClassBadge, dynamicStyles.newClassBadge]}>
+          <Feather name="star" size={12} color={colors.success} />
+          <Text style={[styles.newClassBadgeText, dynamicStyles.newClassBadgeText]}>New</Text>
+        </View>
+      </View>
       <TouchableOpacity
-        style={styles.enrollButton}
+        style={[styles.enrollButton, dynamicStyles.enrollButton]}
         onPress={() => handleEnroll(item.id, item.name)}
+        activeOpacity={0.8}
       >
-        <Feather name="user-plus" size={20} color={colors.card} />
-        <Text style={styles.enrollButtonText}>Enroll</Text>
+        <View style={[styles.buttonIconWrapper, styles.buttonIconWrapperSuccess]}>
+          <Feather name="user-plus" size={16} color={colors.card} />
+        </View>
+        <Text style={styles.enrollButtonText as any}>Enroll Now</Text>
+        <View style={styles.enrollArrowContainer}>
+          <Feather name="arrow-right" size={14} color={colors.card} />
+        </View>
       </TouchableOpacity>
     </View>
   )
@@ -138,11 +307,129 @@ export function StudentClassesTab() {
     />
   )
 
+  // Dynamic styles based on theme
+  const dynamicStyles = useMemo(() => ({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    headerSection: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.borderLight,
+    },
+    headerIconContainer: {
+      backgroundColor: isDark ? `${colors.primary}20` : `${colors.primary}15`,
+      borderColor: isDark ? `${colors.primary}40` : `${colors.primary}30`,
+    },
+    headerTitle: {
+      fontSize: fonts.sizes.xxl,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.bold as any,
+      color: themeColors.text,
+      marginBottom: spacing.xs / 2,
+    },
+    headerSubtitle: {
+      fontSize: fonts.sizes.sm,
+      fontFamily: fonts.regular,
+      color: themeColors.textLight,
+    },
+    headerBadge: {
+      backgroundColor: isDark ? `${colors.success}20` : `${colors.success}15`,
+      borderColor: isDark ? `${colors.success}40` : `${colors.success}30`,
+    },
+    headerBadgeText: {
+      color: colors.success,
+    },
+    classCardWrapper: {
+      borderWidth: 1,
+      borderColor: themeColors.borderLight,
+      borderRadius: spacing.lg,
+      overflow: 'hidden' as const,
+    },
+    attendanceStatusBanner: {
+      backgroundColor: isDark ? `${colors.success}20` : `${colors.success}15`,
+      borderTopColor: isDark ? `${colors.success}40` : `${colors.success}30`,
+    },
+    attendanceStatusText: {
+      color: colors.success,
+    },
+    newClassBadge: {
+      backgroundColor: isDark ? `${colors.success}20` : `${colors.success}15`,
+      borderColor: isDark ? `${colors.success}40` : `${colors.success}30`,
+    },
+    newClassBadgeText: {
+      color: colors.success,
+    },
+    loadingText: {
+      fontSize: fonts.sizes.md,
+      fontFamily: fonts.regular,
+      color: themeColors.textLight,
+      marginTop: spacing.md,
+    },
+    tabContainer: {
+      backgroundColor: themeColors.card,
+      borderWidth: 1,
+      borderColor: themeColors.borderLight,
+      shadowColor: isDark ? "#000" : "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.15,
+      shadowRadius: 12,
+      elevation: 6,
+    },
+    tabText: {
+      fontSize: fonts.sizes.md,
+      fontFamily: fonts.regular,
+      fontWeight: fonts.weights.medium as any,
+      color: themeColors.textLight,
+    },
+    activeTabText: {
+      color: colors.card,
+      fontWeight: fonts.weights.semibold as any,
+    },
+    errorContainer: {
+      backgroundColor: colors.danger + '15',
+      borderLeftWidth: 4,
+      borderLeftColor: colors.danger,
+    },
+    errorText: {
+      color: colors.danger,
+      fontSize: fonts.sizes.sm,
+      fontFamily: fonts.regular,
+      flex: 1,
+    },
+    unenrollButton: {
+      backgroundColor: themeColors.card,
+      borderColor: colors.danger,
+    },
+    unenrollButtonText: {
+      color: colors.danger,
+    },
+    markAttendanceButton: {
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.2,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    enrollButton: {
+      shadowColor: colors.success,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.2,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+  }), [themeColors, isDark])
+
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading classes...</Text>
+      <View style={[dynamicStyles.container, styles.centered]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={dynamicStyles.loadingText}>Loading classes...</Text>
+        </View>
       </View>
     )
   }
@@ -152,31 +439,92 @@ export function StudentClassesTab() {
   const emptyComponent = activeTab === 'enrolled' ? renderEmptyEnrolled : renderEmptyAvailable
 
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
+      {/* Header Section */}
+      <View style={[dynamicStyles.headerSection, styles.headerSection]}>
+        <View style={styles.headerContent}>
+          <View style={[styles.headerIconContainer, dynamicStyles.headerIconContainer]}>
+            <Feather name="book-open" size={24} color={colors.primary} />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={dynamicStyles.headerTitle}>My Classes</Text>
+            <Text style={dynamicStyles.headerSubtitle}>
+              {activeTab === 'enrolled' 
+                ? `Manage your ${enrolledClasses.length} enrolled ${enrolledClasses.length === 1 ? 'class' : 'classes'}`
+                : `Discover ${getAvailableForEnrollment().length} available ${getAvailableForEnrollment().length === 1 ? 'class' : 'classes'}`
+              }
+            </Text>
+          </View>
+        </View>
+        {activeTab === 'enrolled' && enrolledClasses.length > 0 && (
+          <View style={[styles.headerBadge, dynamicStyles.headerBadge]}>
+            <Feather name="check-circle" size={14} color={colors.success} />
+            <Text style={[styles.headerBadgeText, dynamicStyles.headerBadgeText]}>
+              {Object.values(attendanceStatusMap).filter(Boolean).length}/{enrolledClasses.length} Marked
+            </Text>
+          </View>
+        )}
+      </View>
+
       {/* Tab Selector */}
-      <View style={styles.tabContainer}>
+      <View style={[styles.tabContainer, dynamicStyles.tabContainer]}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'enrolled' && styles.activeTab]}
           onPress={() => setActiveTab('enrolled')}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.tabText, activeTab === 'enrolled' && styles.activeTabText]}>
-            Enrolled ({enrolledClasses.length})
-          </Text>
+          <View style={styles.tabContent}>
+            <Feather 
+              name="book-open" 
+              size={16} 
+              color={activeTab === 'enrolled' ? colors.card : themeColors.textLight} 
+              style={styles.tabIcon}
+            />
+            <Text style={[dynamicStyles.tabText, activeTab === 'enrolled' && dynamicStyles.activeTabText]}>
+              Enrolled
+            </Text>
+            {enrolledClasses.length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'enrolled' && styles.tabBadgeActive]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'enrolled' && styles.tabBadgeTextActive]}>
+                  {enrolledClasses.length}
+                </Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'available' && styles.activeTab]}
           onPress={() => setActiveTab('available')}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.tabText, activeTab === 'available' && styles.activeTabText]}>
-            Available ({getAvailableForEnrollment().length})
-          </Text>
+          <View style={styles.tabContent}>
+            <Feather 
+              name="plus-circle" 
+              size={16} 
+              color={activeTab === 'available' ? colors.card : themeColors.textLight} 
+              style={styles.tabIcon}
+            />
+            <Text style={[dynamicStyles.tabText, activeTab === 'available' && dynamicStyles.activeTabText]}>
+              Available
+            </Text>
+            {getAvailableForEnrollment().length > 0 && (
+              <View style={[styles.tabBadge, activeTab === 'available' && styles.tabBadgeActive]}>
+                <Text style={[styles.tabBadgeText, activeTab === 'available' && styles.tabBadgeTextActive]}>
+                  {getAvailableForEnrollment().length}
+                </Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
       {/* Error Message */}
       {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
+        <View style={[styles.errorContainer, dynamicStyles.errorContainer]}>
+          <View style={styles.errorIconContainer}>
+            <Feather name="alert-circle" size={20} color={colors.danger} />
+          </View>
+          <Text style={dynamicStyles.errorText}>{error}</Text>
         </View>
       )}
 
@@ -204,69 +552,157 @@ export function StudentClassesTab() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: spacing.lg,
-  },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    fontSize: fonts.sizes.md,
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: spacing.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+    borderWidth: 2,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: spacing.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+  },
+  headerBadgeText: {
+    fontSize: fonts.sizes.xs,
     fontFamily: fonts.regular,
-    color: colors.textLight,
-    marginTop: spacing.md,
+    fontWeight: fonts.weights.semibold as any,
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: spacing.md,
-    marginBottom: spacing.lg,
-    padding: spacing.xs,
+    borderRadius: spacing.xl,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+    padding: spacing.xs / 2,
     flexWrap: 'wrap',
   },
   tab: {
     flex: 1,
-    minWidth: 120,
+    minWidth: 140,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.md,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   activeTab: {
     backgroundColor: colors.primary,
   },
-  tabText: {
-    fontSize: fonts.sizes.md,
+  tabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIcon: {
+    marginRight: spacing.xs,
+  },
+  tabBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 10,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    marginLeft: spacing.xs,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  tabBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  tabBadgeText: {
+    fontSize: fonts.sizes.xs,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.medium,
+    fontWeight: fonts.weights.bold as any,
     color: colors.textLight,
   },
-  activeTabText: {
+  tabBadgeTextActive: {
     color: colors.card,
-    fontWeight: fonts.weights.semibold,
   },
   errorContainer: {
-    backgroundColor: colors.danger + '20',
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: spacing.md,
     padding: spacing.md,
+    marginHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },
-  errorText: {
-    color: colors.danger,
-    fontSize: fonts.sizes.sm,
-    fontFamily: fonts.regular,
-    textAlign: 'center',
+  errorIconContainer: {
+    marginRight: spacing.sm,
   },
   listContent: {
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl,
+  },
+  classItemWrapper: {
+    marginBottom: spacing.xl,
+  },
+  classCardWrapper: {
+    position: 'relative',
+    marginBottom: spacing.sm,
+  },
+  attendanceStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+  },
+  attendanceStatusText: {
+    fontSize: fonts.sizes.xs,
+    fontFamily: fonts.regular,
+    fontWeight: fonts.weights.semibold as any,
+    marginLeft: spacing.xs / 2,
+  },
+  newClassBadge: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs / 2,
+    borderRadius: spacing.md,
+    borderWidth: 1,
+    gap: spacing.xs / 2,
+    zIndex: 10,
+  },
+  newClassBadgeText: {
+    fontSize: fonts.sizes.xs,
+    fontFamily: fonts.regular,
+    fontWeight: fonts.weights.bold as any,
   },
   buttonContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: -spacing.xs,
+    marginTop: spacing.sm,
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
     gap: spacing.sm,
@@ -279,19 +715,66 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.primary,
     borderRadius: spacing.md,
-    paddingVertical: spacing.md,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
   },
   markAttendanceButtonText: {
     color: colors.card,
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
+    fontWeight: fonts.weights.semibold as any,
+  },
+  markAttendanceButtonDisabled: {
+    backgroundColor: colors.success,
+    borderColor: `${colors.success}40`,
+  },
+  markAttendanceButtonTextDisabled: {
+    color: colors.card,
+  },
+  buttonIconWrapper: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.xs,
+  },
+  buttonIconWrapperSuccess: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  buttonIconWrapperDanger: {
+    backgroundColor: `${colors.danger}15`,
+  },
+  successBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.success,
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  enrollArrowContainer: {
     marginLeft: spacing.xs,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   unenrollButton: {
     flex: 1,
@@ -301,12 +784,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.card,
     borderColor: colors.danger,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: spacing.md,
-    paddingVertical: spacing.md,
-    shadowColor: "#000",
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    shadowColor: colors.danger,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -314,8 +798,7 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
-    marginLeft: spacing.xs,
+    fontWeight: fonts.weights.semibold as any,
   },
   enrollButton: {
     flexDirection: "row",
@@ -323,22 +806,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.success,
     borderRadius: spacing.md,
-    paddingVertical: spacing.md,
-    marginTop: -spacing.xs,
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
     minWidth: 120,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: `${colors.success}40`,
   },
   enrollButtonText: {
     color: colors.card,
-    fontSize: fonts.sizes.md,
+    fontSize: fonts.sizes.sm,
     fontFamily: fonts.regular,
-    fontWeight: fonts.weights.semibold,
-    marginLeft: spacing.sm,
+    fontWeight: fonts.weights.semibold as any,
   },
 })

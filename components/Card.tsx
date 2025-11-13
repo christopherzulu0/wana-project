@@ -1,7 +1,19 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import { colors } from "../constants/Colors";
 import { spacing } from "../constants/spacing";
+import { useColorScheme } from "../hooks/useColorScheme";
+
+// Dark mode color palette
+const darkColors = {
+  background: "#151718",
+  card: "#1F2324",
+  text: "#ECEDEE",
+  textLight: "#9BA1A6",
+  textExtraLight: "#6C757D",
+  border: "#2A2D2E",
+  borderLight: "#252829",
+}
 
 interface CardProps {
   children: React.ReactNode;
@@ -10,16 +22,39 @@ interface CardProps {
 }
 
 export const Card = ({ children, style, variant = "default" }: CardProps) => {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    card: isDark ? darkColors.card : colors.card,
+    border: isDark ? darkColors.border : colors.border,
+    text: isDark ? darkColors.text : colors.text,
+  }), [isDark])
+
   const getCardStyle = () => {
+    const baseStyle = { backgroundColor: themeColors.card }
+    
     switch (variant) {
       case "default":
-        return styles.defaultCard;
+        return baseStyle;
       case "outlined":
-        return styles.outlinedCard;
+        return {
+          ...baseStyle,
+          borderWidth: 1,
+          borderColor: themeColors.border,
+        };
       case "elevated":
-        return styles.elevatedCard;
+        return {
+          ...baseStyle,
+          shadowColor: themeColors.text,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDark ? 0.3 : 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+        };
       default:
-        return styles.defaultCard;
+        return baseStyle;
     }
   };
 
@@ -34,22 +69,5 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: spacing.md,
     padding: spacing.md,
-    backgroundColor: colors.card,
-  },
-  defaultCard: {
-    backgroundColor: colors.card,
-  },
-  outlinedCard: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  elevatedCard: {
-    backgroundColor: colors.card,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
 });

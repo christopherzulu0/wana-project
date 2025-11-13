@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,22 @@ import { Class, Student } from '../types';
 import { useStudents } from '../hooks/useStudents';
 import { colors } from '../constants/Colors';
 import { spacing } from '../constants/spacing';
+import { useColorScheme } from '../hooks/useColorScheme';
 import { Button } from './Button';
 import { Input } from './Input';
 import { Card } from './Card';
 import { EmptyState } from './EmptyState';
+
+// Dark mode color palette
+const darkColors = {
+    background: "#151718",
+    card: "#1F2324",
+    text: "#ECEDEE",
+    textLight: "#9BA1A6",
+    textExtraLight: "#6C757D",
+    border: "#2A2D2E",
+    borderLight: "#252829",
+}
 
 interface ClassEnrollmentModalProps {
   visible: boolean;
@@ -36,6 +48,20 @@ export const ClassEnrollmentModal: React.FC<ClassEnrollmentModalProps> = ({
   onUnenrollStudent,
   loading = false,
 }) => {
+  const colorScheme = useColorScheme() ?? 'dark'
+  const isDark = colorScheme === 'dark'
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    background: isDark ? darkColors.background : colors.background,
+    card: isDark ? darkColors.card : colors.card,
+    text: isDark ? darkColors.text : colors.text,
+    textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
+    border: isDark ? darkColors.border : colors.border,
+    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+  }), [isDark])
+  
   const { students, loading: studentsLoading, fetchStudents } = useStudents();
   const [searchQuery, setSearchQuery] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -119,11 +145,11 @@ export const ClassEnrollmentModal: React.FC<ClassEnrollmentModalProps> = ({
       <Card key={student.id} style={styles.studentCard}>
         <View style={styles.studentInfo}>
           <View style={styles.studentDetails}>
-            <Text style={styles.studentName}>{student.name}</Text>
-            <Text style={styles.studentDetail}>
+            <Text style={[styles.studentName, { color: themeColors.text }]}>{student.name}</Text>
+            <Text style={[styles.studentDetail, { color: themeColors.textLight }]}>
               {student.registrationNumber || 'No Registration Number'}
             </Text>
-            <Text style={styles.studentDetail}>
+            <Text style={[styles.studentDetail, { color: themeColors.textLight }]}>
               {student.email || 'No Email'}
             </Text>
             {student.hasAccount && (
@@ -181,14 +207,14 @@ export const ClassEnrollmentModal: React.FC<ClassEnrollmentModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        <View style={styles.header}>
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <View style={[styles.header, { borderBottomColor: themeColors.borderLight }]}>
           <View style={styles.headerInfo}>
-            <Text style={styles.title}>Manage Enrollment</Text>
-            <Text style={styles.subtitle}>{classItem.name} - {classItem.section}</Text>
+            <Text style={[styles.title, { color: themeColors.text }]}>Manage Enrollment</Text>
+            <Text style={[styles.subtitle, { color: themeColors.textLight }]}>{classItem.name} - {classItem.section}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={colors.text.primary} />
+            <Ionicons name="close" size={24} color={themeColors.textLight} />
           </TouchableOpacity>
         </View>
 
@@ -197,15 +223,16 @@ export const ClassEnrollmentModal: React.FC<ClassEnrollmentModalProps> = ({
             placeholder="Search students by name, email, or registration number"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            leftIcon={<Ionicons name="search" size={20} color={colors.text.secondary} />}
+            leftIcon={<Ionicons name="search" size={20} color={themeColors.textLight} />}
             style={styles.searchInput}
+            themeColors={themeColors}
           />
         </View>
 
         {studentsLoading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading students...</Text>
+            <Text style={[styles.loadingText, { color: themeColors.textLight }]}>Loading students...</Text>
           </View>
         ) : filteredStudents.length === 0 ? (
           <EmptyState
@@ -215,7 +242,7 @@ export const ClassEnrollmentModal: React.FC<ClassEnrollmentModalProps> = ({
           />
         ) : (
           <ScrollView style={styles.studentsList} showsVerticalScrollIndicator={false}>
-            <Text style={styles.studentsCount}>
+            <Text style={[styles.studentsCount, { color: themeColors.textLight }]}>
               {filteredStudents.length} student{filteredStudents.length !== 1 ? 's' : ''} found
             </Text>
             {filteredStudents.map(renderStudentCard)}
@@ -229,7 +256,6 @@ export const ClassEnrollmentModal: React.FC<ClassEnrollmentModalProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -237,7 +263,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   headerInfo: {
     flex: 1,
@@ -245,11 +270,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: colors.text.primary,
   },
   subtitle: {
     fontSize: 14,
-    color: colors.text.secondary,
     marginTop: spacing.xs,
   },
   closeButton: {
@@ -269,7 +292,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: colors.text.secondary,
     marginTop: spacing.md,
   },
   studentsList: {
@@ -279,7 +301,6 @@ const styles = StyleSheet.create({
   },
   studentsCount: {
     fontSize: 14,
-    color: colors.text.secondary,
     marginBottom: spacing.md,
     fontWeight: '500',
   },
@@ -297,12 +318,10 @@ const styles = StyleSheet.create({
   studentName: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.text.primary,
     marginBottom: spacing.xs,
   },
   studentDetail: {
     fontSize: 14,
-    color: colors.text.secondary,
     marginBottom: spacing.xs,
   },
   accountBadge: {

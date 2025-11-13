@@ -8,7 +8,7 @@ import {
 } from "../utils/mockData";
 import { getToday } from "../utils/dateUtils";
 
-const API_BASE_URL = 'http://10.59.131.203:3000';
+const API_BASE_URL = 'http://10.156.181.203:3000';
 
 export const useAttendance = () => {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(mockAttendanceRecords);
