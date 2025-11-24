@@ -28,7 +28,7 @@ import { useColorScheme } from "../../../hooks/useColorScheme"
 import { useUsers } from "../../../hooks/useUsers"
 import type { Class, User } from "../../../types"
 
-const API_BASE_URL = 'http://10.156.181.203:3000';
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app';
 
 // Dark mode color palette
 const darkColors = {

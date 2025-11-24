@@ -50,6 +50,5 @@ Join our community of developers creating universal apps.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
 
 
-// "eas": {
-//   "projectId": "952ebe80-55a7-460e-bafb-5447a4a650ff"
-// }
+
+

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './useAuth'
 
-const API_BASE_URL = 'http://10.156.181.203:3000'
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app'
 
 interface Class {
   id: string

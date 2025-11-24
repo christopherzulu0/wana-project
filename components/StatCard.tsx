@@ -1,5 +1,6 @@
 import React from "react"
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from "react-native"
+import { LinearGradient } from "expo-linear-gradient"
 import { Feather } from "@expo/vector-icons"
 import { colors } from "../constants/Colors"
 import { fonts } from "../constants/fonts"
@@ -29,61 +30,82 @@ export function StatCard({
     compact = false,
     themeColors,
 }: StatCardProps) {
-    const titleSize = compact ? fonts.sizes.sm : fonts.sizes.md
+    const titleSize = compact ? fonts.sizes.sm : fonts.sizes.md + 1
     const subtitleSize = compact ? fonts.sizes.xs : fonts.sizes.sm
-    const valueSize = compact ? fonts.sizes.lg : fonts.sizes.xl
-    const iconPx = compact ? 18 : 20
+    const valueSize = compact ? fonts.sizes.lg : fonts.sizes.xxl
+    const iconPx = compact ? 18 : 24
 
     const displayValue =
         typeof value === "number" ? formatNumber(value) : String(value)
 
     // Use theme colors if provided, otherwise fall back to default colors
-    const cardBg = themeColors?.card || colors.card
     const textColor = themeColors?.text || colors.text
     const textLightColor = themeColors?.textLight || colors.textLight
-    const borderColor = themeColors?.borderLight || colors.borderLight
+    const cardBg = themeColors?.card || colors.card
+    
+    // Create gradient background colors based on the card's color
+    // Use darker backgrounds for better text contrast
+    const gradientStart = `${color}25`
+    const gradientEnd = `${color}12`
+    const borderColor = `${color}50`
 
     return (
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor }]}>
-            <View style={styles.row}>
-                <View style={styles.left}>
-                    <View style={styles.titleRow}>
-                        <View style={[styles.iconWrap, { backgroundColor: `${color}15`, borderColor: `${color}22` }]}>
-                            <Feather name={icon} size={iconPx} color={color} />
+        <View style={[styles.cardContainer, { borderColor }]}>
+            <LinearGradient
+                colors={[gradientStart, gradientEnd]}
+                style={styles.cardGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            >
+                <View style={styles.card}>
+                    <View style={styles.row}>
+                        <View style={styles.left}>
+                            <View style={styles.titleRow}>
+                                <View style={[styles.iconWrap, { borderColor: `${color}50` }]}>
+                                    <LinearGradient
+                                        colors={[`${color}30`, `${color}15`]}
+                                        style={styles.iconGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Feather name={icon} size={iconPx} color={color} />
+                                    </LinearGradient>
+                                </View>
+                                <View style={styles.titleContainer}>
+                                    <Text
+                                        style={[styles.title, { fontSize: titleSize, color: textColor, fontWeight: "600" }]}
+                                        accessibilityRole="header"
+                                    >
+                                        {title}
+                                    </Text>
+                                    {subtitle ? (
+                                        <Text
+                                            style={[styles.subtitle, { fontSize: subtitleSize, color: textLightColor, opacity: 0.9 }]}
+                                        >
+                                            {subtitle}
+                                        </Text>
+                                    ) : null}
+                                </View>
+                            </View>
                         </View>
-                        <Text
-                            style={[styles.title, { fontSize: titleSize, color: textColor }]}
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                            accessibilityRole="header"
-                        >
-                            {title}
-                        </Text>
-                    </View>
-                    {subtitle ? (
-                        <Text
-                            style={[styles.subtitle, { fontSize: subtitleSize, color: textLightColor }]}
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                        >
-                            {subtitle}
-                        </Text>
-                    ) : null}
-                </View>
 
-                <View style={styles.right}>
-                    <Text
-                        style={[styles.value, { fontSize: valueSize, color }]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.65}
-                        ellipsizeMode="clip"
-                        accessibilityLabel={`${title} ${displayValue}`}
-                    >
-                        {displayValue}
-                    </Text>
+                        <View style={styles.right}>
+                            <View style={[styles.valueContainer, { backgroundColor: `${color}20`, borderColor: `${color}40` }]}>
+                                <Text
+                                    style={[styles.value, { fontSize: valueSize, color, fontWeight: "700" }]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.65}
+                                    ellipsizeMode="clip"
+                                    accessibilityLabel={`${title} ${displayValue}`}
+                                >
+                                    {displayValue}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
                 </View>
-            </View>
+            </LinearGradient>
         </View>
     )
 }
@@ -99,52 +121,92 @@ function formatNumber(n: number) {
 /* Styles */
 
 const styles = StyleSheet.create({
-    card: {
-        borderRadius: spacing.md,
-        borderWidth: 1,
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.md,
+    cardContainer: {
+        borderRadius: spacing.lg + 4,
+        borderWidth: 1.5,
+        width: "100%",
+        minHeight: 120,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 8,
+        marginBottom: spacing.md,
+    },
+    cardGradient: {
+        borderRadius: spacing.lg + 4,
         flex: 1,
-        minWidth: 140,
+    },
+    card: {
+        paddingVertical: spacing.lg + spacing.md,
+        paddingHorizontal: spacing.lg + spacing.md,
+        flex: 1,
     },
     row: {
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "space-between",
+        flex: 1,
     },
     left: {
         flex: 1,
-        paddingRight: spacing.sm,
+        paddingRight: spacing.md,
+        minWidth: 0, // Allows flex to shrink below content size
     },
     titleRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: spacing.sm,
-        marginBottom: spacing.xs / 2,
-        minHeight: 28,
+        gap: spacing.md,
     },
     iconWrap: {
-        width: 32,
-        height: 32,
-        borderRadius: 8,
+        width: 52,
+        height: 52,
+        borderRadius: 16,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 1,
+        borderWidth: 2,
+        overflow: "hidden",
+    },
+    iconGradient: {
+        width: "100%",
+        height: "100%",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    titleContainer: {
+        flex: 1,
+        minWidth: 0, // Allows flex to shrink below content size
     },
     title: {
-        flexShrink: 1,
         fontFamily: fonts.regular,
-        fontWeight: fonts.weights.semibold,
+        fontWeight: "600" as const,
+        marginBottom: spacing.xs / 2,
+        flexShrink: 1,
     } as TextStyle,
     subtitle: {
         fontFamily: fonts.regular,
+        fontSize: fonts.sizes.sm,
+        flexShrink: 1,
+        flexWrap: "wrap",
     },
     right: {
-        maxWidth: "40%",
         alignItems: "flex-end",
         justifyContent: "center",
+        flexShrink: 0,
+        marginLeft: spacing.sm,
+    },
+    valueContainer: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: 12,
+        minWidth: 70,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1.5,
     },
     value: {
         fontFamily: fonts.regular,
-        fontWeight: fonts.weights.bold,
+        fontWeight: "700" as const,
     },
 })

@@ -2,9 +2,11 @@
 
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useRef } from "react"
-import { Image, StyleSheet, Text, View, Animated, Dimensions } from "react-native"
+import { Image, StyleSheet, Text, View, Animated, Dimensions, Platform, ScrollView } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient"
+import { BlurView } from "expo-blur"
+import { Feather } from "@expo/vector-icons"
 import { Button } from "../components/Button"
 import { StatusBar } from "../components/StatusBar"
 import { colors } from "../constants/Colors"
@@ -15,12 +17,19 @@ import { useColorScheme } from "../hooks/useColorScheme"
 
 // Dark mode color palette
 const darkColors = {
-  background: "#151718",
-  card: "#1F2324",
-  text: "#ECEDEE",
-  textLight: "#9BA1A6",
-  border: "#2A2D2E",
-  borderLight: "#252829",
+  background: "#0A0E27",
+  backgroundGradientStart: "#0A0E27",
+  backgroundGradientEnd: "#1A1F3A",
+  card: "#1A1F3A",
+  cardSecondary: "#252D4A",
+  text: "#F8FAFC",
+  textLight: "#CBD5E1",
+  textExtraLight: "#94A3B8",
+  border: "#3B4563",
+  borderLight: "#1E293B",
+  accent: "#00D9FF",
+  accentAlt: "#7C3AED",
+  success: "#10B981",
 }
 
 const { width, height } = Dimensions.get("window")
@@ -33,18 +42,33 @@ export default function WelcomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(50)).current
   const scaleAnim = useRef(new Animated.Value(0.8)).current
+  const pulseAnim = useRef(new Animated.Value(1)).current
+  const rotateAnim = useRef(new Animated.Value(0)).current
+  const featureSlideAnim = useRef([
+    new Animated.Value(30),
+    new Animated.Value(30),
+    new Animated.Value(30),
+  ]).current
   
   // Theme-aware colors
   const themeColors = useMemo(() => ({
     background: isDark ? darkColors.background : colors.background,
+    backgroundGradientStart: isDark ? darkColors.backgroundGradientStart : "#F5F7FA",
+    backgroundGradientEnd: isDark ? darkColors.backgroundGradientEnd : "#FFFFFF",
     card: isDark ? darkColors.card : colors.card,
+    cardSecondary: isDark ? darkColors.cardSecondary : "#F0F4F8",
     text: isDark ? darkColors.text : colors.text,
     textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : "#64748B",
     border: isDark ? darkColors.border : colors.border,
     borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+    accent: isDark ? darkColors.accent : colors.primary,
+    accentAlt: isDark ? darkColors.accentAlt : "#7C3AED",
+    success: isDark ? darkColors.success : "#059669",
   }), [isDark])
 
   useEffect(() => {
+    // Main animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -62,6 +86,42 @@ export default function WelcomeScreen() {
         useNativeDriver: true,
       }),
     ]).start()
+
+    // Staggered feature animations
+    const featureAnimations = featureSlideAnim.map((anim, index) =>
+      Animated.timing(anim, {
+        toValue: 0,
+        duration: 600,
+        delay: 300 + index * 100,
+        useNativeDriver: true,
+      })
+    )
+    Animated.parallel(featureAnimations).start()
+
+    // Pulse animation for scanning frame
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start()
+
+    // Rotate animation for accent elements
+    Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 20000,
+        useNativeDriver: true,
+      })
+    ).start()
   }, [])
 
   useEffect(() => {
@@ -87,15 +147,46 @@ export default function WelcomeScreen() {
   }
 
   const gradientColors = isDark 
-    ? ["#0f172a", "#1e293b", "#1e293b"]
-    : ["#ffffff", "#f0fdf4", "#ecfdf5"]
+    ? [themeColors.backgroundGradientStart, themeColors.backgroundGradientEnd, themeColors.card] as const
+    : [themeColors.backgroundGradientStart, themeColors.backgroundGradientEnd, "#FFFFFF"] as const
+
+  const rotateInterpolate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  })
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <StatusBar />
 
-      <LinearGradient colors={gradientColors} style={styles.gradientBackground} />
+      <LinearGradient 
+        colors={gradientColors} 
+        style={styles.gradientBackground}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
 
+      {/* Animated background accent */}
+      <Animated.View
+        style={[
+          styles.backgroundAccent,
+          {
+            transform: [{ rotate: rotateInterpolate }],
+            opacity: isDark ? 0.15 : 0.05,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[themeColors.accent, themeColors.accentAlt]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </Animated.View>
+
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.mainContent}>
         <Animated.View
           style={[
@@ -108,20 +199,33 @@ export default function WelcomeScreen() {
         >
           <View style={styles.header}>
             <Animated.View style={[styles.logoContainer, { transform: [{ scale: scaleAnim }] }]}>
-              <LinearGradient colors={["#059669", "#10b981"]} style={styles.logoGradient}>
+                <LinearGradient 
+                  colors={isDark ? [themeColors.success, "#059669"] : ["#059669", themeColors.success]} 
+                  style={styles.logoGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
                 <View style={styles.logoIcon}>
-                  <Text style={styles.logoText}>👤</Text>
+                    <Feather name="user-check" size={28} color="#FFFFFF" />
                 </View>
+                  <View style={[styles.logoGlow, { backgroundColor: themeColors.success + "40" }]} />
               </LinearGradient>
             </Animated.View>
             <View style={styles.appNameContainer}>
-              <Text style={[styles.appName, { color: isDark ? "#10b981" : "#059669" }]}>FaceAttend</Text>
-              <Text style={[styles.appSubtitle, { color: isDark ? "#10b981" : "#10b981" }]}>Smart Recognition</Text>
+                <Text style={[styles.appName, { color: themeColors.success }]}>FaceAttend</Text>
+                <Text style={[styles.appSubtitle, { color: themeColors.textLight }]}>Smart Recognition</Text>
             </View>
           </View>
 
           <View style={styles.heroSection}>
-            <View style={styles.imageContainer}>
+              <Animated.View 
+                style={[
+                  styles.imageContainer,
+                  {
+                    transform: [{ scale: pulseAnim }],
+                  },
+                ]}
+              >
               <Image
                 source={{
                   uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
@@ -129,43 +233,115 @@ export default function WelcomeScreen() {
                 style={styles.heroImage}
                 resizeMode="cover"
               />
-              <View style={[styles.imageOverlay, { backgroundColor: isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(5, 150, 105, 0.1)" }]}>
+                <LinearGradient
+                  colors={isDark 
+                    ? ["rgba(16, 185, 129, 0.25)", "rgba(0, 217, 255, 0.15)", "rgba(124, 58, 237, 0.1)"]
+                    : ["rgba(5, 150, 105, 0.15)", "rgba(5, 150, 105, 0.08)", "rgba(5, 150, 105, 0.05)"]
+                  }
+                  style={StyleSheet.absoluteFillObject}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                />
                 <View style={styles.scanningFrame}>
-                  <View style={[styles.scanningCorner, { borderColor: "#10b981" }]} />
-                  <View style={[styles.scanningCorner, styles.topRight, { borderColor: "#10b981" }]} />
-                  <View style={[styles.scanningCorner, styles.bottomLeft, { borderColor: "#10b981" }]} />
-                  <View style={[styles.scanningCorner, styles.bottomRight, { borderColor: "#10b981" }]} />
+                  <Animated.View style={[styles.scanningCorner, { borderColor: themeColors.success }]} />
+                  <Animated.View style={[styles.scanningCorner, styles.topRight, { borderColor: themeColors.success }]} />
+                  <Animated.View style={[styles.scanningCorner, styles.bottomLeft, { borderColor: themeColors.success }]} />
+                  <Animated.View style={[styles.scanningCorner, styles.bottomRight, { borderColor: themeColors.success }]} />
+                  <View style={[styles.scanningCenter, { backgroundColor: themeColors.success + "20" }]}>
+                    <Feather name="maximize" size={32} color={themeColors.success} />
+                  </View>
                 </View>
-              </View>
-            </View>
+              </Animated.View>
           </View>
 
           <View style={styles.textContainer}>
-            <Text style={[styles.title, { color: isDark ? "#10b981" : "#059669" }]}>Attendance Made{"\n"}Effortless</Text>
-            <Text style={[styles.subtitle, { color: themeColors.textLight }]}>
+              <Text style={[styles.title, { color: themeColors.text }]}>
+                Attendance Made{"\n"}
+                <Text style={{ color: themeColors.success }}>Effortless</Text>
+              </Text>
+              <Text style={[styles.subtitle, { color: themeColors.textLight }]}>
               Experience the future of attendance tracking with secure facial recognition technology. Quick, accurate,
               and contactless.
             </Text>
 
-            <View style={[styles.featuresContainer, { backgroundColor: isDark ? "rgba(16, 185, 129, 0.1)" : "rgba(16, 185, 129, 0.05)", borderColor: isDark ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.1)" }]}>
-              <View style={styles.featureItem}>
-                <Text style={styles.featureIcon}>⚡</Text>
-                <Text style={[styles.featureText, { color: isDark ? "#10b981" : "#059669" }]}>Instant Recognition</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Text style={styles.featureIcon}>🔒</Text>
-                <Text style={[styles.featureText, { color: isDark ? "#10b981" : "#059669" }]}>Secure & Private</Text>
-              </View>
-              <View style={styles.featureItem}>
-                <Text style={styles.featureIcon}>📊</Text>
-                <Text style={[styles.featureText, { color: isDark ? "#10b981" : "#059669" }]}>Real-time Reports</Text>
+            <View style={styles.featuresContainer}>
+                {[
+                  { icon: "zap", title: "Instant Recognition", color: themeColors.accent },
+                  { icon: "lock", title: "Secure & Private", color: themeColors.success },
+                  { icon: "bar-chart-2", title: "Real-time Reports", color: themeColors.accentAlt },
+                ].map((feature, index) => (
+                  <Animated.View
+                    key={index}
+                    style={[
+                      styles.featureCard,
+                      {
+                        backgroundColor: isDark 
+                          ? themeColors.cardSecondary + "80" 
+                          : themeColors.cardSecondary,
+                        borderColor: isDark 
+                          ? feature.color + "30" 
+                          : feature.color + "20",
+                        transform: [{ translateY: featureSlideAnim[index] }],
+                        opacity: fadeAnim,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.featureIconContainer, { backgroundColor: feature.color + "15" }]}>
+                      <Feather name={feature.icon as any} size={20} color={feature.color} />
+                    </View>
+                    <Text style={[styles.featureText, { color: themeColors.text }]}>{feature.title}</Text>
+                  </Animated.View>
+                ))}
               </View>
             </View>
-          </View>
-        </Animated.View>
-      </View>
+          </Animated.View>
+        </View>
+      </ScrollView>
 
-      <Animated.View style={[styles.footer, { opacity: fadeAnim, backgroundColor: isDark ? themeColors.card : "rgba(255, 255, 255, 0.95)", borderTopColor: isDark ? themeColors.borderLight : "rgba(16, 185, 129, 0.1)" }]}>
+      <Animated.View 
+        style={[
+          styles.footer, 
+          { 
+            opacity: fadeAnim,
+            borderTopColor: isDark ? themeColors.border : themeColors.borderLight,
+          }
+        ]}
+      >
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={80} style={styles.footerBlur}>
+            <View style={styles.footerContent}>
+              <Button
+                title="Get Started"
+                onPress={handleGetStarted}
+                variant="primary"
+                size="large"
+                style={styles.primaryButton}
+              />
+              <View style={styles.footerBadges}>
+                <View style={[styles.badge, { backgroundColor: themeColors.success + "15" }]}>
+                  <Feather name="shield" size={14} color={themeColors.success} />
+                  <Text style={[styles.badgeText, { color: themeColors.success }]}>Secure</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: themeColors.accent + "15" }]}>
+                  <Feather name="zap" size={14} color={themeColors.accent} />
+                  <Text style={[styles.badgeText, { color: themeColors.accent }]}>Fast</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: themeColors.accentAlt + "15" }]}>
+                  <Feather name="check-circle" size={14} color={themeColors.accentAlt} />
+                  <Text style={[styles.badgeText, { color: themeColors.accentAlt }]}>Reliable</Text>
+              </View>
+              </View>
+            </View>
+          </BlurView>
+        ) : (
+          <LinearGradient
+            colors={isDark 
+              ? [themeColors.card + "E6", themeColors.card + "F0"]
+              : ["rgba(255, 255, 255, 0.95)", "rgba(255, 255, 255, 0.98)"]
+            }
+            style={styles.footerGradient}
+          >
+            <View style={styles.footerContent}>
         <Button
           title="Get Started"
           onPress={handleGetStarted}
@@ -173,7 +349,23 @@ export default function WelcomeScreen() {
           size="large"
           style={styles.primaryButton}
         />
-        <Text style={[styles.footerText, { color: isDark ? "#10b981" : "#059669" }]}>Secure • Fast • Reliable</Text>
+              <View style={styles.footerBadges}>
+                <View style={[styles.badge, { backgroundColor: themeColors.success + "15" }]}>
+                  <Feather name="shield" size={14} color={themeColors.success} />
+                  <Text style={[styles.badgeText, { color: themeColors.success }]}>Secure</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: themeColors.accent + "15" }]}>
+                  <Feather name="zap" size={14} color={themeColors.accent} />
+                  <Text style={[styles.badgeText, { color: themeColors.accent }]}>Fast</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: themeColors.accentAlt + "15" }]}>
+                  <Feather name="check-circle" size={14} color={themeColors.accentAlt} />
+                  <Text style={[styles.badgeText, { color: themeColors.accentAlt }]}>Reliable</Text>
+                </View>
+              </View>
+            </View>
+          </LinearGradient>
+        )}
       </Animated.View>
     </SafeAreaView>
   )
@@ -190,13 +382,19 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
   },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: spacing.xl,
+  },
   mainContent: {
     flex: 1,
   },
   content: {
-    flex: 1,
     padding: spacing.lg,
-    paddingBottom: 0,
+    paddingBottom: spacing.md,
   },
   header: {
     flexDirection: "row",
@@ -208,27 +406,34 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
   },
   logoGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#059669",
+    shadowColor: "#10B981",
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 8,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
+    position: "relative",
+    overflow: "visible",
   },
   logoIcon: {
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 2,
   },
-  logoText: {
-    fontSize: 24,
-    color: "#ffffff",
+  logoGlow: {
+    position: "absolute",
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    opacity: 0.6,
+    zIndex: 1,
   },
   appNameContainer: {
     flex: 1,
@@ -250,17 +455,19 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: "100%",
     height: height * 0.28,
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: "hidden",
     position: "relative",
-    shadowColor: "#000",
+    shadowColor: "#10B981",
     shadowOffset: {
       width: 0,
-      height: 8,
+      height: 12,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 16,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.2)",
   },
   heroImage: {
     width: "100%",
@@ -276,9 +483,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   scanningFrame: {
-    width: 120,
-    height: 120,
+    width: 140,
+    height: 140,
     position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scanningCenter: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "rgba(16, 185, 129, 0.3)",
   },
   scanningCorner: {
     position: "absolute",
@@ -317,7 +535,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3,
   },
   textContainer: {
-    flex: 1,
     justifyContent: "center",
     minHeight: height * 0.25,
   },
@@ -340,57 +557,90 @@ const styles = StyleSheet.create({
   },
   featuresContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: spacing.md,
+    justifyContent: "space-between",
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  featureCard: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     borderRadius: 16,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
+    minHeight: 100,
+    justifyContent: "center",
+    gap: spacing.sm,
   },
-  featureItem: {
+  featureIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
     alignItems: "center",
-    flex: 1,
-    paddingHorizontal: spacing.xs,
-  },
-  featureIcon: {
-    fontSize: width > 400 ? 28 : width > 350 ? 24 : 20,
     marginBottom: spacing.xs,
-    textShadowColor: "rgba(5, 150, 105, 0.3)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
   },
   featureText: {
-    fontSize: width > 400 ? fonts.sizes.sm : width > 350 ? fonts.sizes.xs : 10,
+    fontSize: width > 400 ? fonts.sizes.xs : 10,
     fontFamily: fonts.regular,
     fontWeight: fonts.weights.semibold,
     textAlign: "center",
-    lineHeight: width > 400 ? 16 : width > 350 ? 14 : 12,
+    lineHeight: width > 400 ? 14 : 12,
   },
   footer: {
+    borderTopWidth: 1.5,
+    overflow: "hidden",
+  },
+  footerBlur: {
     padding: spacing.lg,
     paddingTop: spacing.md,
-    borderTopWidth: 1,
+  },
+  footerGradient: {
+    padding: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  footerContent: {
+    gap: spacing.md,
   },
   primaryButton: {
     width: "100%",
     borderRadius: 16,
     paddingVertical: spacing.lg,
-    shadowColor: "#059669",
+    shadowColor: "#10B981",
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 8,
     },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
-    transform: [{ scale: 1 }],
+    shadowRadius: 16,
+    elevation: 16,
   },
-  footerText: {
-    textAlign: "center",
-    fontSize: width > 400 ? fonts.sizes.sm : width > 350 ? fonts.sizes.xs : 10,
-    marginTop: spacing.md,
+  footerBadges: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 20,
+  },
+  badgeText: {
+    fontSize: fonts.sizes.xs,
+    fontFamily: fonts.regular,
     fontWeight: fonts.weights.semibold,
-    letterSpacing: 1,
-    opacity: 0.8,
+  },
+  backgroundAccent: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    top: -100,
+    right: -100,
+    opacity: 0.1,
   },
 })

@@ -17,7 +17,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { getToday } from "../../utils/dateUtils";
 
-const API_BASE_URL = 'http://10.156.181.203:3000';
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app';
 
 // Dark mode color palette
 const darkColors = {

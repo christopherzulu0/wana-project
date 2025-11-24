@@ -8,13 +8,27 @@ import { useColorScheme } from "../hooks/useColorScheme";
 
 // Dark mode color palette
 const darkColors = {
-  background: "#151718",
-  card: "#1F2324",
-  text: "#ECEDEE",
-  textLight: "#9BA1A6",
-  textExtraLight: "#6C757D",
-  border: "#2A2D2E",
-  borderLight: "#252829",
+  background: "#0A0E27",
+  card: "#1A1F3A",
+  cardPrimary: "#1A1F3A",
+  cardSecondary: "#252D4A",
+  text: "#F8FAFC",
+  textLight: "#CBD5E1",
+  textExtraLight: "#94A3B8",
+  border: "#3B4563",
+  borderLight: "#3B4563",
+}
+
+const lightColors = {
+  background: "#F5F7FA",
+  card: "#FFFFFF",
+  cardPrimary: "#FFFFFF",
+  cardSecondary: "#F0F4F8",
+  text: "#0F172A",
+  textLight: "#475569",
+  textExtraLight: "#64748B",
+  border: "#E2E8F0",
+  borderLight: "#E2E8F0",
 }
 
 interface AttendanceChartProps {
@@ -28,11 +42,7 @@ export const AttendanceChart = ({ stats, title }: AttendanceChartProps) => {
 
   // Theme-aware colors
   const themeColors = useMemo(() => ({
-    card: isDark ? darkColors.card : colors.card,
-    text: isDark ? darkColors.text : colors.text,
-    textLight: isDark ? darkColors.textLight : colors.textLight,
-    border: isDark ? darkColors.border : colors.border,
-    borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+    ...(isDark ? darkColors : lightColors),
   }), [isDark])
   const total = stats.total > 0 ? stats.total : 1; // Prevent division by zero
   const presentPercentage = (stats.present / total) * 100;
@@ -113,23 +123,20 @@ export const AttendanceChart = ({ stats, title }: AttendanceChartProps) => {
         </View>
         
         <View style={[styles.statsContainerBase, dynamicStyles.statsContainer] as any}>
-          <View style={styles.statItem}>
+          <View style={[styles.statItem, { backgroundColor: themeColors.cardSecondary }]}>
             <View style={[styles.statIndicator, styles.presentIndicator]} />
-            <Text style={dynamicStyles.statLabel as any}>Present</Text>
             <Text style={dynamicStyles.statValue as any}>{stats.present}</Text>
             <Text style={dynamicStyles.statPercentage as any}>{Math.round(presentPercentage)}%</Text>
           </View>
           
-          <View style={styles.statItem}>
+          <View style={[styles.statItem, { backgroundColor: themeColors.cardSecondary }]}>
             <View style={[styles.statIndicator, styles.lateIndicator]} />
-            <Text style={dynamicStyles.statLabel as any}>Late</Text>
             <Text style={dynamicStyles.statValue as any}>{stats.late}</Text>
             <Text style={dynamicStyles.statPercentage as any}>{Math.round(latePercentage)}%</Text>
           </View>
           
-          <View style={styles.statItem}>
+          <View style={[styles.statItem, { backgroundColor: themeColors.cardSecondary }]}>
             <View style={[styles.statIndicator, styles.absentIndicator]} />
-            <Text style={dynamicStyles.statLabel as any}>Absent</Text>
             <Text style={dynamicStyles.statValue as any}>{stats.absent}</Text>
             <Text style={dynamicStyles.statPercentage as any}>{Math.round(absentPercentage)}%</Text>
           </View>
@@ -177,6 +184,10 @@ const styles = StyleSheet.create({
   },
   statItem: {
     alignItems: "center",
+    padding: spacing.sm,
+    borderRadius: spacing.md,
+    flex: 1,
+    marginHorizontal: spacing.xs / 2,
   },
   statIndicator: {
     width: 12,

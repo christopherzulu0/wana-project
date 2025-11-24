@@ -107,35 +107,7 @@ export default function ProfileScreen() {
           {renderProfileItem("hash", "ID", user?.id || "")}
         </Card>
         
-        <View style={styles.menuSection}>
-          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Settings</Text>
-          
-          <Card style={styles.menuCard}>
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: themeColors.borderLight }]}>
-              <Feather name="bell" size={20} color={themeColors.text} />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>Notifications</Text>
-              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: themeColors.borderLight }]}>
-              <Feather name="lock" size={20} color={themeColors.text} />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>Privacy & Security</Text>
-              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: themeColors.borderLight }]}>
-              <Feather name="help-circle" size={20} color={themeColors.text} />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>Help & Support</Text>
-              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.menuItem}>
-              <Feather name="info" size={20} color={themeColors.text} />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>About</Text>
-              <Feather name="chevron-right" size={20} color={themeColors.textLight} />
-            </TouchableOpacity>
-          </Card>
-        </View>
+       
         
         <Button
           title="Logout"

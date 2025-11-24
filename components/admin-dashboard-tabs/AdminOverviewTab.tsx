@@ -1,959 +1,551 @@
-"use client"
+"use client";
 
-import { Feather } from "@expo/vector-icons"
-import React, { useMemo } from "react"
+import { Feather } from "@expo/vector-icons";
+import React, { useMemo, useState, useEffect } from "react";
 import {
     ScrollView,
     StyleSheet,
     Text,
-    TextStyle,
     TouchableOpacity,
     useWindowDimensions,
     View,
-    ViewStyle,
-} from "react-native"
-import { colors } from "../../constants/Colors"
-import { fonts } from "../../constants/fonts"
-import { spacing } from "../../constants/spacing"
-import { useAuth } from "../../hooks/useAuth"
-import { useColorScheme } from "../../hooks/useColorScheme"
-import { useUsers } from "../../hooks/useUsers"
-import { useClasses } from "../../hooks/useClasses"
-import { useStudents } from "../../hooks/useStudents"
-import type { AttendanceStats } from "../../types"
-import { AttendanceChart } from "../AttendanceChart"
-import { Button } from "../Button"
-import { StatCard } from "../StatCard"
-import { generateOverallAttendanceReport, saveAndShareReport } from "../../utils/reportGenerator"
-import { Alert } from "react-native"
+  Alert,
+  ActivityIndicator,
+  Animated,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors } from "../../constants/Colors";
+import { fonts } from "../../constants/fonts";
+import { spacing } from "../../constants/spacing";
+import { useAuth } from "../../hooks/useAuth";
+import { useColorScheme } from "../../hooks/useColorScheme";
+import { useUsers } from "../../hooks/useUsers";
+import { useClasses } from "../../hooks/useClasses";
+import { useStudents } from "../../hooks/useStudents";
+import type { AttendanceStats } from "../../types";
+import { AttendanceChart } from "../AttendanceChart";
+import { Button } from "../Button";
+import { generateOverallAttendanceReport, saveAndShareReport } from "../../utils/reportGenerator";
 
-// Dark mode color palette
+// === Theme Colors ===
 const darkColors = {
-    background: "#151718",
-    card: "#1F2324",
-    text: "#ECEDEE",
-    textLight: "#9BA1A6",
-    textExtraLight: "#6C757D",
-    border: "#2A2D2E",
-    borderLight: "#252829",
-}
+  background: "#0A0E27",
+  cardPrimary: "#1A1F3A",
+  cardSecondary: "#252D4A",
+  surface: "rgba(26, 31, 58, 0.6)",
+  text: "#F8FAFC",
+  textLight: "#CBD5E1",
+  textExtraLight: "#94A3B8",
+  border: "#3B4563",
+  accent: "#00D9FF",
+  accentAlt: "#7C3AED",
+  accentWarm: "#FF6B35",
+  success: "#10B981",
+  warning: "#FBBF24",
+  danger: "#FF5555",
+  gradientStart: "#00D9FF",
+  gradientEnd: "#7C3AED",
+};
 
-const API_BASE_URL = 'http://10.156.181.203:3000'
+const lightColors = {
+  background: "#F5F7FA",
+  cardPrimary: "#FFFFFF",
+  cardSecondary: "#F0F4F8",
+  surface: "rgba(255, 255, 255, 0.7)",
+  text: "#0F172A",
+  textLight: "#475569",
+  textExtraLight: "#64748B",
+  border: "#E2E8F0",
+  accent: "#0891B2",
+  accentAlt: "#7C3AED",
+  accentWarm: "#EA580C",
+  success: "#059669",
+  warning: "#D97706",
+  danger: "#DC2626",
+  gradientStart: "#0891B2",
+  gradientEnd: "#7C3AED",
+};
+
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app';
 
 export function AdminOverviewTab({ onNavigateToReports }: { onNavigateToReports?: () => void }) {
-    const { width } = useWindowDimensions()
-    const { user } = useAuth()
-    const colorScheme = useColorScheme() ?? 'dark'
-    const isDark = colorScheme === 'dark'
-    
-    // Fetch data from API
-    const { users, loading: usersLoading } = useUsers()
-    const { classes, loading: classesLoading } = useClasses()
-    const { students, loading: studentsLoading, fetchStudents } = useStudents()
-    
-    // State for attendance data
-    const [attendanceStats, setAttendanceStats] = React.useState<AttendanceStats>({ total: 0, present: 0, late: 0, absent: 0 })
-    const [activeStudentsToday, setActiveStudentsToday] = React.useState(0)
-    const [loadingAttendance, setLoadingAttendance] = React.useState(false)
-    const [recentActivities, setRecentActivities] = React.useState<Array<{ id: string; icon: string; text: string; time: string }>>([])
-    const [loadingActivities, setLoadingActivities] = React.useState(false)
-    const [exportingCSV, setExportingCSV] = React.useState(false)
+  const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const colorScheme = useColorScheme() ?? 'dark';
+  const isDark = colorScheme === 'dark';
 
-    // Theme-aware colors
-    const themeColors = useMemo(() => ({
-        background: isDark ? darkColors.background : colors.background,
-        card: isDark ? darkColors.card : colors.card,
-        text: isDark ? darkColors.text : colors.text,
-        textLight: isDark ? darkColors.textLight : colors.textLight,
-        textExtraLight: isDark ? darkColors.textExtraLight : colors.textExtraLight,
-        border: isDark ? darkColors.border : colors.border,
-        borderLight: isDark ? darkColors.borderLight : colors.borderLight,
-    }), [isDark])
+  const { users, loading: usersLoading } = useUsers();
+  const { classes, loading: classesLoading } = useClasses();
+  const { students, loading: studentsLoading } = useStudents();
 
-    // Mobile-first columns: 2 on phones, 3 if wide (e.g., landscape/tablet)
-    const contentPad = spacing.lg
-    const gutter = spacing.md
-    const cols = width >= 700 ? 3 : 2
-    const itemWidth = Math.floor((width - contentPad * 2 - gutter * (cols - 1)) / cols)
+  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats>({ total: 0, present: 0, late: 0, absent: 0 });
+  const [activeStudentsToday, setActiveStudentsToday] = useState(0);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [recentActivities, setRecentActivities] = useState<Array<{ id: string; icon: string; text: string; time: string }>>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [exportingCSV, setExportingCSV] = useState(false);
 
-    // Fetch today's attendance statistics
-    React.useEffect(() => {
-        const fetchAttendanceStats = async () => {
-            if (students.length === 0) {
-                setAttendanceStats({ total: 0, present: 0, late: 0, absent: 0 })
-                setActiveStudentsToday(0)
-                return
+  const themeColors = useMemo(() => ({
+    ...(isDark ? darkColors : lightColors),
+  }), [isDark]);
+
+  const contentPad = width < 480 ? spacing.md : spacing.lg;
+  const gutter = spacing.md;
+
+  // === Fetch Attendance Stats ===
+  useEffect(() => {
+    const fetchAttendanceStats = async () => {
+      if (students.length === 0) {
+        setAttendanceStats({ total: 0, present: 0, late: 0, absent: 0 });
+        setActiveStudentsToday(0);
+        return;
+      }
+
+      setLoadingAttendance(true);
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        let present = 0, late = 0, absent = 0;
+
+        const batchSize = 10;
+        for (let i = 0; i < students.length; i += batchSize) {
+          const batch = students.slice(i, i + batchSize);
+          const results = await Promise.all(
+            batch.map(async (s) => {
+              try {
+                const res = await fetch(`${API_BASE_URL}/api/students/${s.id}/attendance?month=${new Date().getMonth() + 1}&year=${new Date().getFullYear()}`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                return data.attendance?.find((r: any) => r.date === today);
+              } catch {
+                return null;
+              }
+            })
+          );
+
+          results.forEach((r: any) => {
+            if (r) {
+              if (r.status === 'present') present++;
+              else if (r.status === 'late') late++;
+              else if (r.status === 'absent') absent++;
             }
-            
-            setLoadingAttendance(true)
+          });
+        }
+
+        const total = students.length;
+        const unmarked = total - (present + late + absent);
+        setAttendanceStats({ total, present, late, absent: absent + unmarked });
+        setActiveStudentsToday(present + late);
+      } catch (err) {
+        console.error(err);
+        setAttendanceStats({ total: students.length, present: 0, late: 0, absent: students.length });
+      } finally {
+        setLoadingAttendance(false);
+      }
+    };
+
+    fetchAttendanceStats();
+  }, [students]);
+
+  // === Fetch Recent Activities ===
+  useEffect(() => {
+    const fetchRecentActivities = async () => {
+      if (students.length === 0) return;
+      setLoadingActivities(true);
+      try {
+        const activities: any[] = [];
+        const now = new Date();
+
+        const recent = await Promise.all(
+          students.slice(0, 8).map(async (s) => {
             try {
-                const today = new Date()
-                today.setHours(0, 0, 0, 0)
-                const todayStr = today.toISOString().split('T')[0]
-                
-                // Fetch attendance for all students (batch requests for better performance)
-                // Limit to reasonable batch size to avoid overwhelming the API
-                const batchSize = 10
-                let presentCount = 0
-                let lateCount = 0
-                let absentCount = 0
-                let processedCount = 0
-                
-                // Process students in batches
-                for (let i = 0; i < students.length; i += batchSize) {
-                    const batch = students.slice(i, i + batchSize)
-                    const batchPromises = batch.map(async (student) => {
-                        try {
-                            const response = await fetch(`${API_BASE_URL}/api/students/${student.id}/attendance?month=${today.getMonth() + 1}&year=${today.getFullYear()}`)
-                            if (!response.ok) return null
-                            const data = await response.json()
-                            // Find today's attendance
-                            const todayRecord = data.attendance?.find((record: any) => record.date === todayStr)
-                            return todayRecord
-                        } catch (err) {
-                            console.error(`Error fetching attendance for student ${student.id}:`, err)
-                            return null
-                        }
-                    })
-                    
-                    const batchResults = await Promise.all(batchPromises)
-                    batchResults.forEach((record: any) => {
-                        if (record) {
-                            processedCount++
-                            if (record.status === 'present') presentCount++
-                            else if (record.status === 'late') lateCount++
-                            else if (record.status === 'absent') absentCount++
-                        }
-                    })
-                }
-                
-                // Calculate stats
-                const total = students.length
-                // Students without attendance records for today are considered absent
-                const studentsWithoutRecords = total - processedCount
-                
-                setAttendanceStats({ 
-                    total, 
-                    present: presentCount, 
-                    late: lateCount, 
-                    absent: absentCount + studentsWithoutRecords
+              const res = await fetch(`${API_BASE_URL}/api/students/${s.id}/attendance?month=${now.getMonth() + 1}&year=${now.getFullYear()}`);
+              if (!res.ok) return null;
+              const data = await res.json();
+              const recents = (data.attendance || [])
+                .filter((r: any) => {
+                  const diff = (now.getTime() - new Date(r.date).getTime()) / (1000 * 60 * 60 * 24);
+                  return diff <= 7;
                 })
-                setActiveStudentsToday(presentCount + lateCount)
-            } catch (err) {
-                console.error('Error fetching attendance stats:', err)
-                // Set default stats on error
-                setAttendanceStats({ total: students.length, present: 0, late: 0, absent: students.length })
-                setActiveStudentsToday(0)
-            } finally {
-                setLoadingAttendance(false)
+                .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+              return recents ? { ...recents, student: s } : null;
+            } catch {
+              return null;
             }
-        }
-        
-        if (students.length > 0) {
-            fetchAttendanceStats()
-        }
-    }, [students])
+          })
+        );
 
-    // Calculate KPIs from real data
-    const totalUsers = users.length
-    const totalClasses = classes.length
-    const totalStudents = students.length
+        recent.filter(Boolean).forEach((r: any) => {
+          const diff = (now.getTime() - new Date(r.date).getTime()) / (1000 * 60);
+          let timeStr = '';
+          if (diff < 60) timeStr = diff < 2 ? 'Just now' : `${Math.floor(diff)} mins ago`;
+          else if (diff < 1440) timeStr = `${Math.floor(diff / 60)}h ago`;
+          else timeStr = `${Math.floor(diff / 1440)}d ago`;
 
-    // Helpers
-    const chunk = <T,>(arr: readonly T[], size: number) => {
-        const res: T[][] = []
-        for (let i = 0; i < arr.length; i += size) res.push(arr.slice(i, i + size))
-        return res
-    }
-    const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
+          const className = classes.find(c => c.id === r.classId)?.name || 'Class';
 
-    const presentRate = attendanceStats.total > 0 ? pct(attendanceStats.present + attendanceStats.late, attendanceStats.total) : 0
-    const lateRate = attendanceStats.total > 0 ? pct(attendanceStats.late, attendanceStats.total) : 0
-    const absentRate = attendanceStats.total > 0 ? pct(attendanceStats.absent, attendanceStats.total) : 0
-    
-    const loading = usersLoading || classesLoading || studentsLoading || loadingAttendance
+          activities.push({
+            id: `${r.student.id}-${r.date}`,
+            icon: r.status === 'present' ? 'check-circle' : r.status === 'late' ? 'clock' : 'x-circle',
+            text: `${r.student.name} marked ${r.status} in ${className}`,
+            time: timeStr,
+          });
+        });
+
+        setRecentActivities(activities.sort((a, b) => a.time.localeCompare(b.time)).slice(0, 5));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingActivities(false);
+      }
+    };
+
+    fetchRecentActivities();
+  }, [students, classes]);
+
+  const totalUsers = users.length;
+  const totalClasses = classes.length;
+  const totalStudents = students.length;
+  const loading = usersLoading || classesLoading || studentsLoading || loadingAttendance;
+
+  const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
+  const presentRate = pct(attendanceStats.present + attendanceStats.late, attendanceStats.total);
+  const lateRate = pct(attendanceStats.late, attendanceStats.total);
+  const absentRate = pct(attendanceStats.absent, attendanceStats.total);
 
     const kpis = [
-        { key: "users", title: "Total Users", value: totalUsers, icon: "users" as const, color: colors.primary, subtitle: "Teachers & Admins" },
-        { key: "classes", title: "Total Classes", value: totalClasses, icon: "book-open" as const, color: colors.secondary, subtitle: "All active classes" },
-        { key: "students", title: "Total Students", value: totalStudents, icon: "user-check" as const, color: colors.success, subtitle: "Across all classes" },
-        { key: "active", title: "Active Students", value: activeStudentsToday, icon: "activity" as const, color: colors.statusPresent, subtitle: "Today" },
-    ] as const
+    { title: "Total Users", value: totalUsers, icon: "users" as const, color: themeColors.accent, subtitle: "Teachers & Admins" },
+    { title: "Total Classes", value: totalClasses, icon: "book-open" as const, color: themeColors.accentAlt, subtitle: "Active classes" },
+    { title: "Total Students", value: totalStudents, icon: "user-check" as const, color: themeColors.success, subtitle: "All students" },
+    { title: "Active Today", value: activeStudentsToday, icon: "activity" as const, color: themeColors.accentWarm, subtitle: "Present or late" },
+  ];
 
-    const actions = [
-        { key: "invite", icon: "user-plus" as const, label: "Invite User", onPress: () => console.log("Invite User") },
-        { key: "create", icon: "plus-square" as const, label: "Create Class", onPress: () => console.log("Create Class") },
-        { key: "report", icon: "file-text" as const, label: "Generate Report", onPress: () => console.log("Generate Report") },
-        { key: "export", icon: "download" as const, label: "Export CSV", onPress: () => console.log("Export CSV") },
-    ] as const
+  // === Skeleton Loader Component ===
+  const Skeleton = ({ width, height, style }: any) => {
+    const animatedValue = new Animated.Value(0);
+    useEffect(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(animatedValue, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(animatedValue, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    }, []);
 
-    // Fetch recent activities
-    React.useEffect(() => {
-        const fetchRecentActivities = async () => {
-            if (students.length === 0 && classes.length === 0) {
-                setRecentActivities([])
-                return
-            }
-            
-            setLoadingActivities(true)
-            try {
-                const activities: Array<{ id: string; icon: string; text: string; time: string }> = []
-                const now = new Date()
-                
-                // Get recent attendance records (last 7 days)
-                const recentAttendancePromises = students.slice(0, 10).map(async (student) => {
-                    try {
-                        const today = new Date()
-                        const month = today.getMonth() + 1
-                        const year = today.getFullYear()
-                        const response = await fetch(`${API_BASE_URL}/api/students/${student.id}/attendance?month=${month}&year=${year}`)
-                        if (response.ok) {
-                            const data = await response.json()
-                            const attendance = data.attendance || []
-                            // Get most recent attendance record
-                            const recent = attendance
-                                .filter((r: any) => {
-                                    const recordDate = new Date(r.date)
-                                    const daysDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60 * 24))
-                                    return daysDiff <= 7 && daysDiff >= 0
-                                })
-                                .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-                            
-                            if (recent) {
-                                const recordDate = new Date(recent.date)
-                                const daysDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60 * 24))
-                                const classItem = classes.find(c => c.id === recent.classId)
-                                const className = classItem?.name || 'Unknown Class'
-                                
-                                let timeStr = ''
-                                if (daysDiff === 0) {
-                                    const hoursDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60 * 60))
-                                    if (hoursDiff === 0) {
-                                        const minsDiff = Math.floor((now.getTime() - recordDate.getTime()) / (1000 * 60))
-                                        timeStr = minsDiff <= 1 ? 'Just now' : `${minsDiff} mins ago`
-                                    } else {
-                                        timeStr = hoursDiff === 1 ? '1 hour ago' : `${hoursDiff} hours ago`
-                                    }
-                                } else if (daysDiff === 1) {
-                                    timeStr = 'Yesterday'
-                                } else {
-                                    timeStr = `${daysDiff} days ago`
-                                }
-                                
-                                activities.push({
-                                    id: `attendance-${student.id}-${recent.date}`,
-                                    icon: recent.status === 'present' ? 'check-circle' : recent.status === 'late' ? 'clock' : 'x-circle',
-                                    text: `${student.name} marked ${recent.status} for ${className}`,
-                                    time: timeStr,
-                                })
-                            }
-                        }
-                    } catch (err) {
-                        // Silently fail for individual student fetches
-                    }
-                })
-                
-                await Promise.all(recentAttendancePromises)
-                
-                // Sort by time (most recent first) and limit to 4
-                activities.sort((a, b) => {
-                    const timeA = a.time.includes('Just now') ? 0 : a.time.includes('mins') ? 1 : a.time.includes('hour') ? 2 : a.time.includes('Yesterday') ? 3 : 4
-                    const timeB = b.time.includes('Just now') ? 0 : b.time.includes('mins') ? 1 : b.time.includes('hour') ? 2 : b.time.includes('Yesterday') ? 3 : 4
-                    return timeA - timeB
-                })
-                
-                setRecentActivities(activities.slice(0, 4))
-            } catch (err) {
-                console.error('Error fetching recent activities:', err)
-                setRecentActivities([])
-            } finally {
-                setLoadingActivities(false)
-            }
-        }
-        
-        if (students.length > 0 || classes.length > 0) {
-            fetchRecentActivities()
-        }
-    }, [students, classes])
+    const opacity = animatedValue.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.3, 0.7],
+    });
 
-    // Dynamic styles based on theme
-    const dynamicStyles = useMemo(() => ({
-        container: {
-            ...styles.container,
-            backgroundColor: themeColors.background,
-        },
-        headerBlock: {
-            ...styles.headerBlock,
-            backgroundColor: themeColors.card,
-            borderColor: themeColors.borderLight,
-            shadowOpacity: isDark ? 0.3 : 0.06,
-        },
-        greeting: {
-            ...styles.greeting,
-            color: themeColors.text,
-        },
-        roleBadge: {
-            ...styles.roleBadge,
-            backgroundColor: themeColors.background,
-            borderColor: themeColors.borderLight,
-        },
-        subtitle: {
-            ...styles.subtitle,
-            color: themeColors.textLight,
-        },
-        headerPill: {
-            ...styles.headerPill,
-            backgroundColor: themeColors.background,
-            borderColor: themeColors.borderLight,
-        },
-        headerPillLabel: {
-            ...styles.headerPillLabel,
-            color: themeColors.textLight,
-        },
-        headerPillValue: {
-            ...styles.headerPillValue,
-            color: themeColors.text,
-        },
-        sectionTitle: {
-            ...styles.sectionTitle,
-            color: themeColors.text,
-        },
-        sectionRule: {
-            ...styles.sectionRule,
-            backgroundColor: themeColors.borderLight,
-        },
-        kpiCard: {
-            ...styles.kpiCard,
-            backgroundColor: themeColors.card,
-            borderColor: themeColors.borderLight,
-        },
-        kpiLabel: {
-            ...styles.kpiLabel,
-            color: themeColors.textLight,
-        },
-        kpiChip: {
-            ...styles.kpiChip,
-            backgroundColor: themeColors.borderLight,
-        },
-        kpiChipText: {
-            ...styles.kpiChipText,
-            color: themeColors.textLight,
-        },
-        quickAction: {
-            ...styles.quickAction,
-            backgroundColor: themeColors.card,
-            borderColor: themeColors.borderLight,
-        },
-        quickActionIconWrap: {
-            ...styles.quickActionIconWrap,
-            backgroundColor: themeColors.background,
-            borderColor: themeColors.borderLight,
-        },
-        quickActionLabel: {
-            ...styles.quickActionLabel,
-            color: themeColors.text,
-        },
-        card: {
-            ...styles.card,
-            backgroundColor: themeColors.card,
-            borderColor: themeColors.borderLight,
-        },
-        activityDivider: {
-            ...styles.activityDivider,
-            borderBottomColor: themeColors.borderLight,
-        },
-        activityIconWrap: {
-            ...styles.activityIconWrap,
-            backgroundColor: themeColors.background,
-            borderColor: themeColors.borderLight,
-        },
-        activityText: {
-            ...styles.activityText,
-            color: themeColors.text,
-        },
-        activityTime: {
-            ...styles.activityTime,
-            color: themeColors.textExtraLight,
-        },
-    }), [themeColors, isDark])
+    return (
+      <Animated.View style={[{ width, height, backgroundColor: themeColors.border, borderRadius: 8 }, style, { opacity }]} />
+    );
+  };
 
-    // Show loading state
-    if (loading && totalUsers === 0 && totalClasses === 0 && totalStudents === 0) {
-        return (
-            <ScrollView
-                style={dynamicStyles.container}
-                contentContainerStyle={[styles.scrollContent, { padding: contentPad, paddingBottom: spacing.xxl, alignItems: 'center', justifyContent: 'center', minHeight: 400 }]}
-                showsVerticalScrollIndicator={false}
-            >
-                <Text style={[styles.sectionTitle, { color: themeColors.text, textAlign: 'center', marginTop: spacing.xxl }]}>
-                    Loading dashboard data...
-                </Text>
-            </ScrollView>
-        )
-    }
+  if (loading && totalUsers === 0 && totalClasses === 0 && totalStudents === 0) {
+    return (
+      <ScrollView style={[styles.container, { backgroundColor: themeColors.background }]} contentContainerStyle={{ padding: contentPad, paddingBottom: spacing.xxl }}>
+        <View style={styles.skeletonHero}>
+          <Skeleton width="60%" height={32} style={{ marginBottom: 8 }} />
+          <Skeleton width="40%" height={20} />
+        </View>
+        <View style={styles.skeletonGrid}>
+          {[...Array(4)].map((_, i) => (
+            <View key={i} style={styles.skeletonKpi}>
+              <Skeleton width={40} height={40} style={{ borderRadius: 20, marginBottom: 8 }} />
+              <Skeleton width="70%" height={16} style={{ marginBottom: 4 }} />
+              <Skeleton width="50%" height={14} />
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    );
+  }
 
     return (
         <ScrollView
-            style={dynamicStyles.container}
-            contentContainerStyle={[styles.scrollContent, { padding: contentPad, paddingBottom: spacing.xxl }]}
+      style={[styles.container, { backgroundColor: themeColors.background }]}
+      contentContainerStyle={{ padding: contentPad, paddingBottom: spacing.xxl }}
             showsVerticalScrollIndicator={false}
         >
-            {/* Header */}
-            <View
-                style={[
-                    dynamicStyles.headerBlock,
-                    {
-                        padding: spacing.lg,
-                        flexDirection: width < 480 ? 'column' : 'row',
-                        alignItems: width < 480 ? 'flex-start' : 'center',
-                        justifyContent: 'space-between',
-                        gap: width < 480 ? spacing.md : 0,
-                    },
-                ]}
+      {/* === Hero Section with Gradient === */}
+      <LinearGradient
+        colors={[themeColors.accent + '20', themeColors.accentAlt + '10']}
+        style={styles.heroCard}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
             >
-                <View style={styles.headerLeft}>
-                    <View style={styles.headerTitleRow}>
-                        <Text style={dynamicStyles.greeting} numberOfLines={2} accessibilityRole="header">
-                            {`Hello, ${user?.name ?? "Admin"}!`}
+        <View style={styles.heroContent}>
+          <View>
+            <Text style={[styles.heroTitle, { color: themeColors.text }]} numberOfLines={1}>
+              Welcome, {user?.name?.split(' ')[0] || "Admin"}!
                         </Text>
-                        <View style={dynamicStyles.roleBadge}>
-                            <Feather name="shield" size={14} color={colors.primary} />
-                            <Text style={styles.roleBadgeText}>Administrator</Text>
+            <View style={styles.heroBadge}>
+              <Feather name="shield" size={14} color={themeColors.accent} />
+              <Text style={[styles.heroBadgeText, { color: themeColors.accent }]}>Administrator</Text>
                         </View>
                     </View>
-                    <Text style={dynamicStyles.subtitle} numberOfLines={2}>
-                        Here&apos;s what&apos;s happening across your school today.
+          <Text style={[styles.heroSubtitle, { color: themeColors.textLight }]}>
+            Monitor attendance & manage school efficiently
                     </Text>
                 </View>
 
-                <View style={[styles.headerRight, width < 480 && { width: '100%', justifyContent: 'flex-start' }]}>
-                    <HeaderPill icon="calendar" label="Today" value={formatDate(new Date())} themeColors={themeColors} />
-                    <HeaderPill 
-                    icon="activity" 
-                    label="Active" 
-                    value={`${activeStudentsToday}`}
-                    themeColors={themeColors}
-                    />
+        <View style={styles.heroPills}>
+          <HeroPill icon="calendar" label={new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} />
+          <HeroPill icon="zap" label={`${activeStudentsToday} Active`} highlight />
+        </View>
+      </LinearGradient>
+
+      {/* === Key Metrics === */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Key Metrics</Text>
+        <View style={styles.kpiGrid}>
+          {kpis.map((kpi, i) => (
+            <LinearGradient
+              key={i}
+              colors={[themeColors.accent + '20', themeColors.accentAlt + '10']}
+              style={[styles.kpiCard, { borderColor: kpi.color + '40' }]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <LinearGradient
+                colors={[kpi.color + '15', kpi.color + '05']}
+                style={styles.kpiIconBg}
+              >
+                <Feather name={kpi.icon} size={22} color={kpi.color} />
+              </LinearGradient>
+              <Text style={[styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
+              <Text style={[styles.kpiTitle, { color: themeColors.text }]}>{kpi.title}</Text>
+              <Text style={[styles.kpiSubtitle, { color: themeColors.textExtraLight }]}>{kpi.subtitle}</Text>
+            </LinearGradient>
+          ))}
                 </View>
             </View>
 
-            {/* System Statistics - rock solid 2/3 column grid */}
+      {/* === Today's Performance === */}
             <View style={styles.section}>
-                <SectionHeader title="System Statistics" themeColors={themeColors} />
-                {chunk(kpis, cols).map((row, rowIdx) => (
-                    <View key={`kpi-row-${rowIdx}`} style={[styles.row, { marginBottom: gutter }]}>
-                        {row.map((kpi, colIdx) => {
-                            const isLast = colIdx === row.length - 1
-                            return (
-                                <View
-                                    key={kpi.key}
-                                    style={[
-                                        styles.cell,
-                                        {
-                                            width: itemWidth,
-                                            marginRight: isLast ? 0 : gutter,
-                                            marginBottom: 0,
-                                        },
-                                    ]}
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Today's Performance</Text>
+        <View style={styles.performanceGrid}>
+          {[
+            { label: "Attendance", value: presentRate, icon: "check-circle", color: themeColors.success },
+            { label: "Late", value: lateRate, icon: "clock", color: themeColors.warning },
+            { label: "Absent", value: absentRate, icon: "x-circle", color: themeColors.danger },
+            { label: "Active", value: activeStudentsToday, total: attendanceStats.total, icon: "users", color: themeColors.accent },
+          ].map((item, i) => (
+            <LinearGradient
+              key={i}
+              colors={[themeColors.accent + '20', themeColors.accentAlt + '10']}
+              style={[styles.perfCard, { borderColor: item.color + '40' }]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
                                 >
-                                    <StatCard
-                                        title={kpi.title}
-                                        value={kpi.value}
-                                        icon={kpi.icon}
-                                        color={kpi.color}
-                                        subtitle={kpi.subtitle}
-                                        compact
-                                        themeColors={{
-                                            card: themeColors.card,
-                                            text: themeColors.text,
-                                            textLight: themeColors.textLight,
-                                            borderLight: themeColors.borderLight,
-                                        }}
-                                    />
+              <View style={[styles.perfIcon, { backgroundColor: item.color + '15' }]}>
+                <Feather name={item.icon} size={18} color={item.color} />
                                 </View>
-                            )
-                        })}
-                    </View>
+              <Text style={[styles.perfValue, { color: item.color }]}>
+                {item.total ? `${item.value}/${item.total}` : `${item.value}%`}
+              </Text>
+              <Text style={[styles.perfLabel, { color: themeColors.textLight }]}>{item.label}</Text>
+            </LinearGradient>
                 ))}
             </View>
-
-            {/* KPI Highlights - horizontal scroll to avoid wrapping on phones */}
-            <View style={styles.section}>
-                <SectionHeader title="Today's Highlights" themeColors={themeColors} />
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 2 }}
-                >
-                    <View style={[styles.highlightItem, { marginRight: gutter }]}>
-                        <KpiHighlight icon="percent" label="Attendance Rate" value={`${presentRate}%`} chipLabel="Today" color={colors.primary} themeColors={themeColors} isDark={isDark} />
-                    </View>
-                    <View style={[styles.highlightItem, { marginRight: gutter }]}>
-                        <KpiHighlight icon="clock" label="Late Rate" value={`${lateRate}%`} chipLabel="Today" color={colors.statusLate} themeColors={themeColors} isDark={isDark} />
-                    </View>
-                    <View style={[styles.highlightItem, { marginRight: 0 }]}>
-                        <KpiHighlight icon="alert-triangle" label="Absences" value={`${absentRate}%`} chipLabel="Today" color={colors.statusAbsent} themeColors={themeColors} isDark={isDark} />
-                    </View>
-                </ScrollView>
             </View>
 
-           
-
-            {/* Attendance Summary */}
+      {/* === Attendance Summary === */}
             <View style={styles.section}>
-                <SectionHeader title="Attendance Summary" themeColors={themeColors} />
-                <View style={dynamicStyles.card}>
-                    <AttendanceChart stats={attendanceStats} title="Summary" />
-                    <View style={styles.attendanceCtas}>
-                        <Button
-                            title="View Reports"
-                            variant="outline"
-                            onPress={() => {
-                                if (onNavigateToReports) {
-                                    onNavigateToReports()
-                                }
-                            }}
-                            style={{ ...styles.attendanceCta, marginRight: spacing.sm } as any}
-                        />
-                        <Button
-                            title={exportingCSV ? "Exporting..." : "Export CSV"}
-                            variant="primary"
-                            onPress={async () => {
-                                if (exportingCSV) return
-                                
-                                setExportingCSV(true)
-                                try {
-                                    const csvContent = await generateOverallAttendanceReport(students, classes)
-                                    const fileUri = await saveAndShareReport(csvContent, 'attendance-summary')
-                                    if (fileUri) {
-                                        Alert.alert('Success', 'Attendance summary has been exported and is ready to share.')
-                                    } else {
-                                        Alert.alert('Success', 'Attendance summary has been exported. File saved to device.')
-                                    }
-                                } catch (error) {
-                                    console.error('Error exporting CSV:', error)
-                                    Alert.alert('Error', 'Failed to export attendance summary. Please try again.')
-                                } finally {
-                                    setExportingCSV(false)
-                                }
-                            }}
-                            style={styles.attendanceCta}
-                            disabled={exportingCSV}
-                        />
-                    </View>
-                </View>
-            </View>
-
-            {/* Recent Activities */}
-            <View style={styles.section}>
-                <View style={[styles.sectionHeader, { marginBottom: 0 }]}>
-                    <Text style={dynamicStyles.sectionTitle}>Recent Activities</Text>
-                    <View style={{ flex: 1 }} />
-                    <TouchableOpacity
-                        onPress={() => console.log("See all activity")}
-                        accessibilityRole="button"
-                        accessibilityLabel="See all activities"
-                    >
-                        <Text style={styles.linkText}>See all</Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={[dynamicStyles.card, styles.activityList]}>
-                    {loadingActivities ? (
-                        <View style={styles.activityItem}>
-                            <Text style={[styles.activityText, { color: themeColors.textLight }]}>Loading activities...</Text>
-                        </View>
-                    ) : recentActivities.length === 0 ? (
-                        <View style={styles.activityItem}>
-                            <Text style={[styles.activityText, { color: themeColors.textLight }]}>No recent activities</Text>
-                        </View>
-                    ) : (
-                        recentActivities.map((activity: { id: string; icon: string; text: string; time: string }, idx: number) => (
-                        <View
-                            key={activity.id}
-                            style={[styles.activityItem, idx !== recentActivities.length - 1 && dynamicStyles.activityDivider]}
-                            accessible
-                            accessibilityRole="text"
-                            accessibilityLabel={`${activity.text}, ${activity.time}`}
-                        >
-                            <View style={dynamicStyles.activityIconWrap}>
-                                <Feather name={activity.icon} size={16} color={colors.primary} />
-                            </View>
-                            <View style={styles.activityTextContainer}>
-                                <Text style={dynamicStyles.activityText} numberOfLines={2}>
-                                    {activity.text}
-                                </Text>
-                                <View style={styles.activityMetaRow}>
-                                    <Feather name="clock" size={12} color={themeColors.textExtraLight} />
-                                    <Text style={dynamicStyles.activityTime}>{activity.time}</Text>
-                                </View>
-                            </View>
-                        </View>
-                    ))
-                    )}
-                </View>
-            </View>
-        </ScrollView>
-    )
-}
-
-/* Helpers and Reusable UI */
-
-function formatDate(d: Date) {
-    const opts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }
-    try {
-        return new Intl.DateTimeFormat("en-US", opts).format(d)
-    } catch {
-        return `${d.getMonth() + 1}/${d.getDate()}`
-    }
-}
-
-function SectionHeader({ title, themeColors }: { title: string; themeColors: any }) {
-    return (
-        <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: themeColors.text }]} numberOfLines={1}>
-                {title}
-            </Text>
-            <View style={[styles.sectionRule, { backgroundColor: themeColors.borderLight }]} />
-        </View>
-    )
-}
-
-function HeaderPill({
-    icon,
-    label,
-    value,
-    themeColors,
-}: {
-    icon: React.ComponentProps<typeof Feather>["name"]
-    label: string
-    value: string | number
-    themeColors: any
-}) {
-    return (
-        <View style={[styles.headerPill, { backgroundColor: themeColors.background, borderColor: themeColors.borderLight }]}>
-            <Feather name={icon} size={14} color={themeColors.textLight} />
-            <Text style={[styles.headerPillLabel, { color: themeColors.textLight }]} numberOfLines={1}>
-                {label}
-            </Text>
-            <Text style={[styles.headerPillValue, { color: themeColors.text }]} numberOfLines={1}>
-                {String(value)}
-            </Text>
-        </View>
-    )
-}
-
-function QuickAction({
-    icon,
-    label,
-    onPress,
-    themeColors,
-}: {
-    icon: React.ComponentProps<typeof Feather>["name"]
-    label: string
-    onPress?: () => void
-    themeColors: any
-}) {
-    return (
-        <TouchableOpacity
-            style={[styles.quickAction, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}
-            onPress={onPress}
-            activeOpacity={0.9}
-            accessibilityRole="button"
-            accessibilityLabel={label}
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Attendance Summary</Text>
+        <LinearGradient
+          colors={[themeColors.accent + '20', themeColors.accentAlt + '10']}
+          style={[styles.chartCard, { borderColor: themeColors.accentAlt + '30' }]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
         >
-            <View style={[styles.quickActionIconWrap, { backgroundColor: themeColors.background, borderColor: themeColors.borderLight }]}>
-                <Feather name={icon} size={20} color={colors.primary} />
+          {loadingAttendance ? (
+            <View style={{ height: 200, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={themeColors.accent} />
             </View>
-            <Text style={[styles.quickActionLabel, { color: themeColors.text }]} numberOfLines={1}>
-                {label}
-            </Text>
-        </TouchableOpacity>
-    )
-}
+          ) : (
+            <AttendanceChart stats={attendanceStats} title="Today's Breakdown" />
+          )}
+          <View style={styles.ctaRow}>
+            <Button title="View Reports" variant="outline" onPress={onNavigateToReports} style={{ flex: 1, marginRight: spacing.sm }} />
+                        <Button
+              title={exportingCSV ? "Exporting..." : "Export CSV"}
+                            variant="primary"
+              onPress={async () => {
+                if (exportingCSV) return;
+                setExportingCSV(true);
+                try {
+                  const csv = await generateOverallAttendanceReport(students, classes);
+                  const uri = await saveAndShareReport(csv, 'attendance-report');
+                  Alert.alert('Success', uri ? 'Report ready to share!' : 'Report saved to device.');
+                } catch (err) {
+                  Alert.alert('Error', 'Export failed.');
+                } finally {
+                  setExportingCSV(false);
+                }
+              }}
+              disabled={exportingCSV}
+              style={{ flex: 1 }}
+                        />
+                    </View>
+        </LinearGradient>
+            </View>
 
-function KpiHighlight({
-    icon,
-    label,
-    value,
-    chipLabel,
-    color,
-    themeColors,
-    isDark,
-}: {
-    icon: React.ComponentProps<typeof Feather>["name"]
-    label: string
-    value: string
-    chipLabel?: string
-    color?: string
-    themeColors: any
-    isDark: boolean
-}) {
-    const txtColor = color || colors.primary
-    return (
-        <View style={[styles.kpiCard, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}>
-            <View style={[styles.kpiIconWrap, { backgroundColor: isDark ? `${txtColor}20` : `${txtColor}15` }]}>
-                <Feather name={icon} size={18} color={txtColor} />
+      {/* === Recent Activity === */}
+            <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Recent Activity</Text>
+        <LinearGradient
+          colors={[themeColors.accent + '20', themeColors.accentAlt + '10']}
+          style={styles.activityCard}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {loadingActivities ? (
+            <View style={styles.activitySkeleton}>
+              {[...Array(3)].map((_, i) => (
+                <View key={i} style={{ flexDirection: 'row', marginBottom: spacing.md }}>
+                  <Skeleton width={32} height={32} style={{ borderRadius: 16, marginRight: spacing.sm }} />
+                  <View style={{ flex: 1 }}>
+                    <Skeleton width="80%" height={16} style={{ marginBottom: 4 }} />
+                    <Skeleton width="40%" height={14} />
+                            </View>
+                        </View>
+                    ))}
             </View>
-            <View style={{ flex: 1 }}>
-                <Text style={[styles.kpiLabel, { color: themeColors.textLight }]} numberOfLines={1}>
-                    {label}
-                </Text>
-                <Text style={[styles.kpiValue, { color: txtColor }]} numberOfLines={1}>
-                    {value}
-                </Text>
+          ) : recentActivities.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Feather name="inbox" size={32} color={themeColors.textExtraLight} />
+              <Text style={[styles.emptyText, { color: themeColors.textLight }]}>No recent activity</Text>
             </View>
-            {chipLabel ? (
-                <View style={[styles.kpiChip, { backgroundColor: themeColors.borderLight }]}>
-                    <Text style={[styles.kpiChipText, { color: themeColors.textLight }]} numberOfLines={1}>
-                        {chipLabel}
-                    </Text>
+          ) : (
+            recentActivities.map((act, i) => (
+              <View key={act.id} style={[styles.activityItem, i === recentActivities.length - 1 && { borderBottomWidth: 0 }]}>
+                <View style={[styles.activityDot, { backgroundColor: act.icon === 'check-circle' ? themeColors.success : act.icon === 'clock' ? themeColors.warning : themeColors.danger }]} />
+                <View style={[styles.activityLine, i === recentActivities.length - 1 && { display: 'none' }]} />
+                <View style={styles.activityContent}>
+                  <Feather name={act.icon as any} size={16} color={act.icon === 'check-circle' ? themeColors.success : act.icon === 'clock' ? themeColors.warning : themeColors.danger} />
+                  <Text style={[styles.activityText, { color: themeColors.text }]}>{act.text}</Text>
+                  <Text style={[styles.activityTime, { color: themeColors.textExtraLight }]}>{act.time}</Text>
                 </View>
-            ) : null}
+              </View>
+            ))
+          )}
+        </LinearGradient>
         </View>
-    )
+    </ScrollView>
+  );
 }
 
-/* Styles */
+// === Subcomponents ===
+const HeroPill = ({ icon, label, highlight }: any) => {
+  const themeColors = useColorScheme() === 'dark' ? darkColors : lightColors;
+  return (
+    <View style={[styles.pill, highlight && { backgroundColor: themeColors.accentWarm + '25', borderColor: themeColors.accentWarm + '50' }]}>
+      <Feather name={icon} size={14} color={highlight ? themeColors.accentWarm : themeColors.textLight} />
+      <Text style={[styles.pillText, { color: highlight ? themeColors.accentWarm : themeColors.textLight }]}>{label}</Text>
+    </View>
+  );
+};
 
-const cardBase: ViewStyle = {
-    backgroundColor: colors.card,
-    borderRadius: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
-}
-
+// === Styles ===
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    scrollContent: {},
-
-    // Header
-    headerBlock: {
-        ...cardBase,
-        shadowColor: "#000",
-        shadowRadius: 8,
+  container: { flex: 1 },
+  heroCard: { 
+    borderRadius: 20, 
+    padding: spacing.lg, 
+    marginBottom: spacing.xl, 
+    borderWidth: 1.5, 
+    borderColor: 'transparent',
+    shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        elevation: 2,
-        flexDirection: "column",
-    },
-    headerLeft: {
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  heroContent: { marginBottom: spacing.md },
+  heroTitle: { fontFamily: fonts.bold, fontSize: 24, lineHeight: 32 },
+  heroBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginTop: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: 12, backgroundColor: '#00D9FF15', borderWidth: 1, borderColor: '#00D9FF' },
+  heroBadgeText: { marginLeft: 4, fontSize: 12, fontFamily: fonts.medium, color: '#00D9FF' },
+  heroSubtitle: { fontSize: 15, marginTop: spacing.sm, fontFamily: fonts.regular },
+  heroPills: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: 20, backgroundColor: '#CBD5E115', borderWidth: 1, borderColor: '#CBD5E125' },
+  pillText: { marginLeft: 6, fontSize: 13, fontFamily: fonts.medium },
+
+  section: { marginBottom: spacing.xl },
+  sectionTitle: { fontFamily: fonts.bold, fontSize: 18, marginBottom: spacing.md },
+
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  kpiCard: { 
         flex: 1,
-    },
-    headerTitleRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.sm,
-        marginBottom: spacing.xs,
-        flexWrap: "wrap",
-    },
-    greeting: {
-        fontSize: fonts.sizes.xl,
-        fontFamily: fonts.regular,
-        fontWeight: Number(fonts.weights.bold) as any,
-    },
-    roleBadge: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.xs / 1.5,
-        paddingVertical: 6,
-        paddingHorizontal: spacing.sm,
-        borderRadius: 999,
-        borderWidth: 1,
-    },
-    roleBadgeText: {
-        fontSize: fonts.sizes.sm,
-        fontFamily: fonts.regular,
-        color: colors.primary,
-        fontWeight: fonts.weights.semibold,
-    } as TextStyle,
-    subtitle: {
-        fontSize: fonts.sizes.md,
-        fontFamily: fonts.regular,
-    },
-    headerRight: {
-        marginTop: spacing.md,
-        flexDirection: "row",
-        gap: spacing.xs,
-        flexWrap: 'wrap',
-    },
-    headerPill: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.xs,
-        paddingVertical: 8,
-        paddingHorizontal: spacing.sm,
-        borderRadius: spacing.sm,
-        borderWidth: 1,
         minWidth: 140,
-        flexGrow: 0,
-        overflow: 'hidden',
+    padding: spacing.lg, 
+    borderRadius: 20, 
+    borderWidth: 1.5, 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     },
-    headerPillLabel: {
-        fontSize: fonts.sizes.sm,
-        fontFamily: fonts.regular,
-        flexShrink: 1,
-        minWidth: 0,
-    },
-    headerPillValue: {
-        marginLeft: "auto",
-        fontSize: fonts.sizes.sm,
-        fontFamily: fonts.regular,
-        fontWeight: Number(fonts.weights.semibold) as any,
-        maxWidth: "50%",
-        flexShrink: 1,
-        minWidth: 0,
-    },
+  kpiIconBg: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.sm },
+  kpiValue: { fontFamily: fonts.bold, fontSize: 28, lineHeight: 36 },
+  kpiTitle: { fontFamily: fonts.semibold, fontSize: 14, textAlign: 'center' },
+  kpiSubtitle: { fontSize: 12, marginTop: 2, textAlign: 'center' },
 
-    // Sections
-    section: {
-        marginTop: spacing.lg,
-    },
-    sectionHeader: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.md,
-        marginBottom: spacing.md,
-    },
-    sectionTitle: {
-        fontSize: fonts.sizes.lg,
-        fontFamily: fonts.regular,
-        fontWeight: Number(fonts.weights.semibold) as any,
-    },
-    sectionRule: {
-        height: 1,
+  performanceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  perfCard: { 
         flex: 1,
+    minWidth: 120, 
+    padding: spacing.lg, 
+    borderRadius: 20, 
+    borderWidth: 1.5, 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     },
-    linkText: {
-        color: colors.primary,
-        fontFamily: fonts.regular,
-        fontWeight: Number(fonts.weights.medium) as any,
-    },
+  perfIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.sm },
+  perfValue: { fontFamily: fonts.bold, fontSize: 22 },
+  perfLabel: { fontSize: 13, marginTop: 4 },
 
-    // Grid rows and cells (mobile-first)
-    row: {
-        flexDirection: "row",
+  chartCard: { 
+    borderRadius: 20, 
+    padding: spacing.lg, 
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     },
-    cell: {
-        ...cardBase,
-        padding: 0,
-        backgroundColor: "transparent",
-        borderWidth: 0,
-    },
+  ctaRow: { flexDirection: 'row', marginTop: spacing.lg, gap: spacing.sm },
 
-    // Highlights
-    highlightItem: {
-        width: 240,
-    },
-    kpiCard: {
-        ...cardBase,
-        padding: spacing.md,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.md,
-    },
-    kpiIconWrap: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    kpiLabel: {
-        fontSize: fonts.sizes.sm,
-        fontFamily: fonts.regular,
-        marginBottom: spacing.xs / 2,
-    },
-    kpiValue: {
-        fontSize: fonts.sizes.xl,
-        fontFamily: fonts.regular,
-        fontWeight: Number(fonts.weights.bold) as any,
-    },
-    kpiChip: {
-        paddingHorizontal: spacing.sm,
-        paddingVertical: spacing.xs / 2,
-        borderRadius: 999,
-    },
-    kpiChipText: {
-        fontSize: fonts.sizes.xs,
-        fontFamily: fonts.regular,
-    },
-
-    // Quick Actions
-    quickAction: {
-        ...cardBase,
-        alignItems: "center",
-        paddingVertical: spacing.lg,
-        gap: spacing.sm,
-    },
-    quickActionIconWrap: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        borderWidth: 1,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    quickActionLabel: {
-        fontSize: fonts.sizes.sm,
-        fontFamily: fonts.regular,
-        fontWeight: Number(fonts.weights.semibold) as any,
-        textAlign: "center",
-    },
-
-    // Cards
-    card: {
-        ...cardBase,
+  activityCard: { 
+    borderRadius: 20, 
         padding: spacing.lg,
+    borderWidth: 1.5, 
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
     },
+  activityItem: { flexDirection: 'row', paddingVertical: spacing.sm, borderBottomWidth: 1, borderColor: '#3B456315' },
+  activityDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6, marginRight: spacing.md },
+  activityLine: { position: 'absolute', left: 4.5, top: 16, bottom: -spacing.lg, width: 1.5, backgroundColor: '#3B456330' },
+  activityContent: { flex: 1, marginLeft: spacing.sm },
+  activityText: { fontSize: 14, flex: 1, marginLeft: spacing.xs },
+  activityTime: { fontSize: 12, alignSelf: 'flex-end', marginTop: spacing.xs },
 
-    // Attendance
-    attendanceCtas: {
-        flexDirection: "row",
-        marginTop: spacing.md,
-    },
-    attendanceCta: {
-        flex: 1,
-    },
+  emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
+  emptyText: { marginTop: spacing.sm, fontSize: 14 },
 
-    // Activity List
-    activityList: {
-        padding: 0,
-    },
-    activityItem: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.md,
-    },
-    activityDivider: {
-        borderBottomWidth: 1,
-    },
-    activityIconWrap: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-        marginRight: spacing.sm,
-        marginTop: 2,
-    },
-    activityTextContainer: {
-        flex: 1,
-    },
-    activityText: {
-        fontSize: fonts.sizes.md,
-        fontFamily: fonts.regular,
-    },
-    activityMetaRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.xs,
-        marginTop: spacing.xs / 2,
-    },
-    activityTime: {
-        fontSize: fonts.sizes.xs,
-        fontFamily: fonts.regular,
-    },
-})
+  skeletonHero: { padding: spacing.lg, backgroundColor: '#1A1F3A', borderRadius: 16, marginBottom: spacing.xl },
+  skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  skeletonKpi: { flex: 1, minWidth: 140, padding: spacing.lg, alignItems: 'center' },
+  activitySkeleton: { paddingVertical: spacing.md },
+}); 

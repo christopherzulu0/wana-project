@@ -37,10 +37,10 @@ export default function NotFoundScreen() {
         <StatusBar />
         <View style={styles.content}>
           <Text style={[styles.text, { color: themeColors.text }]}>This screen doesn't exist.</Text>
-          <Link href="/" style={styles.link}>
+        <Link href="/" style={styles.link}>
             <Text style={[styles.linkText, { color: colors.primary }]}>Go to home screen!</Text>
-          </Link>
-        </View>
+        </Link>
+      </View>
       </SafeAreaView>
     </>
   );

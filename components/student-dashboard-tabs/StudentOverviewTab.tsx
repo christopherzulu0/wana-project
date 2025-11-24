@@ -1,18 +1,18 @@
 "use client"
 
-import { StyleSheet, Text, View, ScrollView, ActivityIndicator, useWindowDimensions } from "react-native"
+import { Feather } from "@expo/vector-icons"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native"
 import { colors } from "../../constants/Colors"
 import { fonts } from "../../constants/fonts"
-import { useAuth } from "../../hooks/useAuth"
 import { spacing } from "../../constants/spacing"
-import { StatCard } from "../StatCard"
-import { Feather } from "@expo/vector-icons"
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useAuth } from "../../hooks/useAuth"
+import { useColorScheme } from "../../hooks/useColorScheme"
 import { useStudentEnrollment } from "../../hooks/useStudentEnrollment"
 import { EmptyState } from "../EmptyState"
-import { useColorScheme } from "../../hooks/useColorScheme"
+import { StatCard } from "../StatCard"
 
-const API_BASE_URL = 'http://10.156.181.203:3000'
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app'
 
 // Dark mode color palette
 const darkColors = {

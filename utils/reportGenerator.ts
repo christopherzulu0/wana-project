@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-const API_BASE_URL = 'http://10.156.181.203:3000';
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app';
 
 // Simple CSV to Excel converter (we'll use CSV format which Excel can open)
 export const generateCSVReport = (data: any[], headers: string[], filename: string): string => {

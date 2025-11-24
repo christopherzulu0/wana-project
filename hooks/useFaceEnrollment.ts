@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert } from 'react-native';
 
 // Hardcoded to local backend - change this when deploying
-const API_URL = 'http://10.156.181.203:3000';
+const API_URL = 'https://attendance-records-wana.vercel.app';
 
 export function useFaceEnrollment() {
   const [loading, setLoading] = useState(false);

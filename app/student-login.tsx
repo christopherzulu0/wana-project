@@ -1,13 +1,15 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { View, Text, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Dimensions } from "react-native"
-import { router } from "expo-router"
+import { useMemo, useState, useRef, useEffect } from "react"
+import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Animated } from "react-native"
+import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
+import { LinearGradient } from "expo-linear-gradient"
+import { Feather } from "@expo/vector-icons"
 import { StatusBar } from "../components/StatusBar"
 import { spacing } from "../constants/spacing"
 import { colors } from "../constants/Colors"
-import { Card } from "../components/Card"
+import { fonts } from "../constants/fonts"
 import { Button } from "../components/Button"
 import { Input } from "../components/Input"
 import { useAuth } from "../hooks/useAuth"
@@ -15,36 +17,95 @@ import { useColorScheme } from "../hooks/useColorScheme"
 
 // Dark mode color palette
 const darkColors = {
-  background: "#151718",
-  card: "#1F2324",
-  text: "#ECEDEE",
-  textLight: "#9BA1A6",
-  border: "#2A2D2E",
-  borderLight: "#252829",
+  background: "#0A0E27",
+  backgroundGradientStart: "#0A0E27",
+  backgroundGradientEnd: "#1A1F3A",
+  card: "#1A1F3A",
+  cardSecondary: "#252D4A",
+  text: "#F8FAFC",
+  textLight: "#CBD5E1",
+  textExtraLight: "#94A3B8",
+  border: "#3B4563",
+  borderLight: "#1E293B",
+  accent: "#00D9FF",
+  accentAlt: "#7C3AED",
+  success: "#10B981",
 }
 
-const { width } = Dimensions.get("window")
-
 export default function StudentLogin() {
+  const router = useRouter()
   const colorScheme = useColorScheme() ?? 'dark'
   const isDark = colorScheme === 'dark'
-  
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
   const { login } = useAuth()
-  
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(30)).current
+  const scaleAnim = useRef(new Animated.Value(0.9)).current
+  const rotateAnim = useRef(new Animated.Value(0)).current
+
   // Theme-aware colors
   const themeColors = useMemo(() => ({
     background: isDark ? darkColors.background : colors.background,
+    backgroundGradientStart: isDark ? darkColors.backgroundGradientStart : "#F5F7FA",
+    backgroundGradientEnd: isDark ? darkColors.backgroundGradientEnd : "#FFFFFF",
     card: isDark ? darkColors.card : colors.card,
+    cardSecondary: isDark ? darkColors.cardSecondary : "#F0F4F8",
     text: isDark ? darkColors.text : colors.text,
     textLight: isDark ? darkColors.textLight : colors.textLight,
+    textExtraLight: isDark ? darkColors.textExtraLight : "#64748B",
     border: isDark ? darkColors.border : colors.border,
     borderLight: isDark ? darkColors.borderLight : colors.borderLight,
+    accent: isDark ? darkColors.accent : colors.primary,
+    accentAlt: isDark ? darkColors.accentAlt : "#7C3AED",
+    success: isDark ? darkColors.success : "#059669",
   }), [isDark])
+
+  // Animation on mount
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 7,
+        useNativeDriver: true,
+      }),
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 20000,
+          useNativeDriver: true,
+        })
+      ),
+    ]).start()
+  }, [])
+
+  const rotateInterpolate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  })
+
+  const gradientColors: [string, string] = [
+    themeColors.backgroundGradientStart,
+    themeColors.backgroundGradientEnd
+  ]
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -52,91 +113,191 @@ export default function StudentLogin() {
 
   const handleLogin = async () => {
     if (!formData.email || !formData.password) {
-      Alert.alert("Error", "Please fill in all fields")
+      setError("Please fill in all fields")
       return
     }
 
     setLoading(true)
+    setError("")
     try {
       const success = await login(formData.email, formData.password)
       if (success) {
         router.replace("/student-dashboard")
       } else {
-        Alert.alert("Error", "Invalid email or password")
+        setError("Invalid email or password")
       }
     } catch (error) {
-      Alert.alert("Error", "Login failed. Please try again.")
+      setError("Login failed. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
+  const handleBack = () => {
+    router.push("/")
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <StatusBar />
-      <KeyboardAvoidingView style={styles.keyboardAvoidingView} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={[styles.backgroundDecoration, { backgroundColor: isDark ? "#3b82f6" : "#3b82f6" }]} />
-          <View style={[styles.backgroundDecoration2, { backgroundColor: isDark ? "#8b5cf6" : "#8b5cf6" }]} />
 
-          <View style={styles.content}>
+      <LinearGradient
+        colors={gradientColors}
+        style={styles.gradientBackground}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
+      {/* Animated background accent */}
+      <Animated.View
+        style={[
+          styles.backgroundAccent,
+          {
+            transform: [{ rotate: rotateInterpolate }],
+            opacity: isDark ? 0.15 : 0.05,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[themeColors.accent, themeColors.accentAlt]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </Animated.View>
+
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <Animated.View
+          style={[
+            styles.contentWrapper,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          {/* Top Bar */}
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={[styles.backButton, { backgroundColor: themeColors.card + "E6" }]}
+              onPress={handleBack}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather name="arrow-left" size={20} color={themeColors.textLight} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Main Content */}
+          <View style={styles.mainContent}>
+            {/* Header Section */}
             <View style={styles.header}>
-              <View style={[styles.iconContainer, { backgroundColor: isDark ? "#3b82f6" : "#3b82f6" }]}>
-                <Text style={styles.iconText}>🎓</Text>
-              </View>
-              <Text style={[styles.title, { color: themeColors.text }]}>Welcome Back</Text>
-              <Text style={[styles.subtitle, { color: themeColors.textLight }]}>Sign in to access your attendance records and academic progress</Text>
+              <Animated.View
+                style={[
+                  styles.logoContainer,
+                  { transform: [{ scale: scaleAnim }] }
+                ]}
+              >
+                <LinearGradient
+                  colors={isDark ? [themeColors.accent, themeColors.accentAlt] : [themeColors.accentAlt, themeColors.accent]}
+                  style={styles.logoGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.logoIcon}>
+                    <Feather name="book" size={24} color="#FFFFFF" />
+                  </View>
+                </LinearGradient>
+              </Animated.View>
+              <Text style={[styles.title, { color: themeColors.text }]}>
+                Student Login
+              </Text>
+              <Text style={[styles.subtitle, { color: themeColors.textLight }]}>
+                Access your attendance records
+              </Text>
             </View>
 
-            <Card style={[styles.formCard, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}>
-              <View style={styles.form}>
-                <Input
-                  label="Email Address"
-                  value={formData.email}
-                  onChangeText={(value) => handleInputChange("email", value)}
-                  placeholder="student@school.edu"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  themeColors={themeColors}
-                  style={styles.input}
-                />
+            {/* Form Card */}
+            <View style={styles.formCardContainer}>
+              <View style={[styles.formCard, {
+                backgroundColor: isDark ? "#0F172A" : "#FFFFFF",
+                borderColor: isDark ? "rgba(59, 130, 246, 0.2)" : "rgba(226, 232, 240, 0.8)",
+                shadowColor: isDark ? "#000000" : "#10B981",
+                shadowOffset: { width: 0, height: 12 },
+                shadowOpacity: isDark ? 0.3 : 0.15,
+                shadowRadius: 24,
+                elevation: 12,
+              }]}>
+                {error ? (
+                  <Animated.View
+                    style={[
+                      styles.errorContainer,
+                      {
+                        backgroundColor: isDark ? "rgba(239, 68, 68, 0.15)" : "#fef2f2",
+                        borderColor: isDark ? "rgba(239, 68, 68, 0.3)" : "#fecaca"
+                      },
+                      { opacity: fadeAnim }
+                    ]}
+                  >
+                    <Feather name="alert-circle" size={16} color="#EF4444" />
+                    <Text style={[styles.errorText, { color: "#EF4444" }]}>{error}</Text>
+                  </Animated.View>
+                ) : null}
 
-                <Input
-                  label="Password"
-                  value={formData.password}
-                  onChangeText={(value) => handleInputChange("password", value)}
-                  placeholder="Enter your password"
-                  secureTextEntry
-                  themeColors={themeColors}
-                  style={styles.input}
-                />
+                <View style={styles.form}>
+                  <View style={styles.inputContainer}>
+                    <Input
+                      label="Email"
+                      placeholder="student@school.edu"
+                      value={formData.email}
+                      onChangeText={(value) => handleInputChange("email", value)}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      themeColors={themeColors}
+                      leftIcon={<Feather name="mail" size={18} color={themeColors.textLight} />}
+                    />
+                  </View>
 
-                <Button
-                  title={loading ? "Signing In..." : "Sign In"}
-                  onPress={handleLogin}
-                  loading={loading}
-                  style={styles.loginButton}
-                />
+                  <View style={styles.inputContainer}>
+                    <Input
+                      label="Password"
+                      placeholder="Enter your password"
+                      value={formData.password}
+                      onChangeText={(value) => handleInputChange("password", value)}
+                      secureTextEntry
+                      themeColors={themeColors}
+                      leftIcon={<Feather name="lock" size={18} color={themeColors.textLight} />}
+                    />
+                  </View>
+
+                  <Button
+                    title="Sign In"
+                    onPress={handleLogin}
+                    loading={loading}
+                    style={styles.button}
+                  />
+                </View>
               </View>
-            </Card>
+            </View>
 
-            <View style={styles.footer}>
-              <View style={[styles.helpSection, { backgroundColor: themeColors.card, borderColor: themeColors.borderLight }]}>
-                <Text style={[styles.helpTitle, { color: themeColors.text }]}>Need Help?</Text>
-                <Text style={[styles.footerText, { color: themeColors.textLight }]}>
-                  Don't have an account? Contact your teacher or school administrator for assistance.
-                </Text>
+            {/* Help Section */}
+            <View style={styles.helpSection}>
+              <View style={[styles.helpCard, {
+                backgroundColor: themeColors.cardSecondary,
+                borderColor: themeColors.border
+              }]}>
+                <Feather name="help-circle" size={20} color={themeColors.accent} />
+                <View style={styles.helpContent}>
+                  <Text style={[styles.helpTitle, { color: themeColors.text }]}>Need Help?</Text>
+                  <Text style={[styles.helpText, { color: themeColors.textLight }]}>
+                    Contact your teacher or administrator for account access
+                  </Text>
+                </View>
               </View>
-
-              <Button
-                title="← Back to Main Login"
-                variant="outline"
-                onPress={() => router.back()}
-                style={[styles.backButton, { borderColor: themeColors.borderLight }]}
-              />
             </View>
           </View>
-        </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -146,124 +307,147 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  gradientBackground: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  backgroundAccent: {
+    position: "absolute",
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    top: -80,
+    right: -80,
+  },
   keyboardAvoidingView: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    minHeight: Dimensions.get("window").height,
-  },
-  backgroundDecoration: {
-    position: "absolute",
-    top: -50,
-    right: -50,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    opacity: 0.1,
-  },
-  backgroundDecoration2: {
-    position: "absolute",
-    bottom: -30,
-    left: -30,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    opacity: 0.08,
-  },
-  content: {
+  contentWrapper: {
     flex: 1,
     padding: spacing.lg,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    justifyContent: "space-between",
+  },
+  topBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: "center",
+    alignItems: "center",
+  },
+  mainContent: {
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 0,
   },
   header: {
     alignItems: "center",
-    marginBottom: spacing.xl * 1.5,
+    marginBottom: spacing.lg,
   },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  logoContainer: {
+    marginBottom: spacing.md,
+  },
+  logoGradient: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: spacing.lg,
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: "#00D9FF",
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 12,
     elevation: 8,
   },
-  iconText: {
-    fontSize: 32,
+  logoIcon: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
-    fontSize: 32,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
+    fontSize: fonts.sizes.xl * 1.2,
+    fontFamily: fonts.regular,
+    fontWeight: "800" as const,
+    marginBottom: spacing.xs / 2,
+    textAlign: "center",
     letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: fonts.sizes.sm,
+    fontFamily: fonts.regular,
     textAlign: "center",
-    lineHeight: 24,
-    paddingHorizontal: spacing.md,
-    maxWidth: width * 0.8,
+    opacity: 0.8,
+  },
+  formCardContainer: {
+    marginBottom: spacing.md,
   },
   formCard: {
-    marginBottom: spacing.xl,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: spacing.xl,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   form: {
-    gap: spacing.lg,
+    gap: spacing.md,
   },
-  input: {
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: spacing.sm,
+    gap: spacing.sm,
     marginBottom: spacing.sm,
   },
-  loginButton: {
-    marginTop: spacing.lg,
-    backgroundColor: "#3b82f6",
-    borderRadius: 12,
-    paddingVertical: spacing.md + 2,
-    shadowColor: "#3b82f6",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+  errorText: {
+    fontSize: fonts.sizes.sm,
+    fontFamily: fonts.regular,
+    flex: 1,
+    fontWeight: "500" as const,
   },
-  footer: {
-    alignItems: "center",
-    gap: spacing.xl,
+  inputContainer: {
+    marginBottom: 0,
+  },
+  button: {
+    width: "100%",
+    borderRadius: 14,
+    paddingVertical: spacing.md,
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+    marginTop: spacing.xs,
   },
   helpSection: {
-    alignItems: "center",
-    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  helpCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: spacing.md,
     borderRadius: 16,
     borderWidth: 1,
+    gap: spacing.sm,
+  },
+  helpContent: {
+    flex: 1,
+    gap: spacing.xs / 2,
   },
   helpTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: spacing.sm,
+    fontSize: fonts.sizes.sm,
+    fontFamily: fonts.regular,
+    fontWeight: "600" as const,
   },
-  footerText: {
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 20,
-    maxWidth: width * 0.8,
-  },
-  backButton: {
-    width: "100%",
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: spacing.md,
-    backgroundColor: "transparent",
+  helpText: {
+    fontSize: fonts.sizes.xs,
+    fontFamily: fonts.regular,
+    lineHeight: 18,
   },
 })

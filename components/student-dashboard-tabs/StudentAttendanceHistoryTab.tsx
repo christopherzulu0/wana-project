@@ -17,7 +17,7 @@ import { RefreshControl } from "react-native"
 import { useFocusEffect } from "expo-router"
 import { useColorScheme } from "../../hooks/useColorScheme"
 
-const API_BASE_URL = 'http://10.156.181.203:3000'
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app'
 
 // Dark mode color palette
 const darkColors = {

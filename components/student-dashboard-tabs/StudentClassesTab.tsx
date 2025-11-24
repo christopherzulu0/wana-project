@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { ClassFaceScanModal } from "../ClassFaceScanModal"
 import { useColorScheme } from "../../hooks/useColorScheme"
 
-const API_BASE_URL = 'http://10.156.181.203:3000'
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app'
 
 // Dark mode color palette
 const darkColors = {
@@ -32,13 +32,15 @@ export function StudentClassesTab() {
   const router = useRouter()
   const colorScheme = useColorScheme() ?? 'dark'
   const isDark = colorScheme === 'dark'
-  
+
   const [activeTab, setActiveTab] = useState<'enrolled' | 'available'>('enrolled')
   const [showFaceScanModal, setShowFaceScanModal] = useState(false)
   const [selectedClass, setSelectedClass] = useState<any>(null)
   const [studentId, setStudentId] = useState<string | null>(null)
   const [attendanceStatusMap, setAttendanceStatusMap] = useState<Record<string, boolean>>({})
   const [checkingAttendance, setCheckingAttendance] = useState(false)
+  const [requestStatusMap, setRequestStatusMap] = useState<Record<string, { status: string; requestId?: string }>>({})
+  const [requestingPermission, setRequestingPermission] = useState<string | null>(null)
   const {
     enrolledClasses,
     availableClasses,
@@ -102,12 +104,12 @@ export function StudentClassesTab() {
       if (response.ok) {
         const data = await response.json()
         const todayAttendance = data.attendance || []
-        
+
         // Check for each enrolled class if attendance is marked for today
         enrolledClasses.forEach((classItem) => {
           const hasAttendance = todayAttendance.some(
-            (record: any) => record.date === today && 
-            (record.classId === classItem.id || record.className === classItem.name)
+            (record: any) => record.date === today &&
+              (record.classId === classItem.id || record.className === classItem.name)
           )
           statusMap[classItem.id] = hasAttendance
         })
@@ -125,8 +127,83 @@ export function StudentClassesTab() {
   useEffect(() => {
     if (studentId && enrolledClasses.length > 0) {
       checkAttendanceForToday()
+      checkRequestStatus()
     }
   }, [studentId, enrolledClasses, checkAttendanceForToday])
+
+  // Check attendance request status for all enrolled classes
+  const checkRequestStatus = useCallback(async () => {
+    if (!studentId || enrolledClasses.length === 0) return
+
+    const statusMap: Record<string, { status: string; requestId?: string }> = {}
+
+    try {
+      // Check permission for each enrolled class
+      for (const classItem of enrolledClasses) {
+        const response = await fetch(
+          `${API_BASE_URL}/api/attendance-requests/check/${studentId}/${classItem.id}`
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.hasPermission) {
+            statusMap[classItem.id] = { status: 'approved', requestId: data.request?.id }
+          } else if (data.status === 'pending') {
+            statusMap[classItem.id] = { status: 'pending', requestId: data.request?.id }
+          } else {
+            statusMap[classItem.id] = { status: 'none' }
+          }
+        }
+      }
+
+      setRequestStatusMap(statusMap)
+    } catch (err) {
+      console.error('Error checking request status:', err)
+    }
+  }, [studentId, enrolledClasses])
+
+  // Request attendance permission
+  const requestAttendancePermission = async (classItem: any) => {
+    if (!studentId) return
+
+    setRequestingPermission(classItem.id)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/attendance-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId: studentId,
+          classId: classItem.id,
+          reason: `Request to mark attendance for ${classItem.name}`,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        Alert.alert(
+          'Request Submitted',
+          `Your attendance request for ${classItem.name} has been submitted. Please wait for teacher approval.`,
+          [{ text: 'OK' }]
+        )
+        // Update request status
+        setRequestStatusMap(prev => ({
+          ...prev,
+          [classItem.id]: { status: 'pending', requestId: data.request.id }
+        }))
+      } else {
+        const errorData = await response.json()
+        Alert.alert('Error', errorData.error || 'Failed to submit request')
+      }
+    } catch (err) {
+      console.error('Error requesting permission:', err)
+      Alert.alert('Error', 'Network error occurred while submitting request')
+    } finally {
+      setRequestingPermission(null)
+    }
+  }
 
   const handleEnroll = async (classId: string, className: string) => {
     Alert.alert(
@@ -182,8 +259,52 @@ export function StudentClassesTab() {
       return
     }
 
-    setSelectedClass(classItem)
-    setShowFaceScanModal(true)
+    // Check request status
+    const requestStatus = requestStatusMap[classItem.id]
+
+    if (!requestStatus || requestStatus.status === 'none') {
+      // No request exists - prompt to request permission
+      Alert.alert(
+        'Permission Required',
+        `You need to request permission from your teacher before marking attendance for ${classItem.name}.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Request Permission',
+            onPress: () => requestAttendancePermission(classItem)
+          }
+        ]
+      )
+      return
+    }
+
+    if (requestStatus.status === 'pending') {
+      Alert.alert(
+        'Request Pending',
+        `Your attendance request for ${classItem.name} is pending teacher approval. Please wait for approval before marking attendance.`,
+        [{ text: 'OK' }]
+      )
+      return
+    }
+
+    if (requestStatus.status === 'approved') {
+      // Permission granted - proceed to face scan
+      setSelectedClass(classItem)
+      setShowFaceScanModal(true)
+    } else {
+      // Rejected or other status
+      Alert.alert(
+        'Permission Required',
+        `Your previous request was not approved. Would you like to request permission again?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Request Again',
+            onPress: () => requestAttendancePermission(classItem)
+          }
+        ]
+      )
+    }
   }
 
   const handleFaceScanSuccess = () => {
@@ -204,6 +325,10 @@ export function StudentClassesTab() {
 
   const renderEnrolledClassItem = ({ item }: { item: any }) => {
     const isAttendanceMarked = attendanceStatusMap[item.id] || false
+    const requestStatus = requestStatusMap[item.id]
+    const isRequestPending = requestStatus?.status === 'pending'
+    const hasPermission = requestStatus?.status === 'approved'
+    const needsRequest = !requestStatus || requestStatus.status === 'none'
 
     return (
       <View style={styles.classItemWrapper}>
@@ -217,50 +342,82 @@ export function StudentClassesTab() {
               </Text>
             </View>
           )}
+          {!isAttendanceMarked && isRequestPending && (
+            <View style={[styles.requestStatusBanner, dynamicStyles.requestStatusBanner]}>
+              <Feather name="clock" size={14} color={colors.warning} />
+              <Text style={[styles.requestStatusText, dynamicStyles.requestStatusText]}>
+                Request Pending Approval
+              </Text>
+            </View>
+          )}
+          {!isAttendanceMarked && hasPermission && (
+            <View style={[styles.permissionBanner, dynamicStyles.permissionBanner]}>
+              <Feather name="shield" size={14} color={colors.primary} />
+              <Text style={[styles.permissionText, dynamicStyles.permissionText]}>
+                Permission Granted
+              </Text>
+            </View>
+          )}
         </View>
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[
               styles.markAttendanceButton,
               isAttendanceMarked && styles.markAttendanceButtonDisabled,
+              isRequestPending && styles.markAttendanceButtonPending,
+              needsRequest && styles.markAttendanceButtonRequest,
               dynamicStyles.markAttendanceButton
             ]}
             onPress={() => handleMarkAttendance(item)}
-            disabled={isAttendanceMarked || checkingAttendance}
+            disabled={isAttendanceMarked || checkingAttendance || requestingPermission === item.id}
             activeOpacity={0.8}
           >
-             <View style={[
-               styles.buttonIconWrapper,
-               isAttendanceMarked && styles.buttonIconWrapperSuccess
-             ]}>
-               <Feather 
-                 name={isAttendanceMarked ? "check-circle" : "camera"} 
-                 size={16} 
-                 color={isAttendanceMarked ? colors.success : colors.card} 
-               />
-             </View>
-             <Text style={[
-               styles.markAttendanceButtonText,
-               isAttendanceMarked && styles.markAttendanceButtonTextDisabled
-             ] as any}>
-               {isAttendanceMarked ? "Already Marked" : "Mark Attendance"}
-             </Text>
-             {isAttendanceMarked && (
-               <View style={styles.successBadge}>
-                 <Feather name="check" size={8} color={colors.success} />
-               </View>
-             )}
+            <View style={[
+              styles.buttonIconWrapper,
+              isAttendanceMarked && styles.buttonIconWrapperSuccess,
+              isRequestPending && styles.buttonIconWrapperWarning
+            ]}>
+              <Feather
+                name={
+                  isAttendanceMarked ? "check-circle" :
+                    isRequestPending ? "clock" :
+                      needsRequest ? "send" :
+                        "camera"
+                }
+                size={16}
+                color={
+                  isAttendanceMarked ? colors.success :
+                    isRequestPending ? colors.warning :
+                      needsRequest ? colors.primary :
+                        colors.card
+                }
+              />
+            </View>
+            <Text style={[
+              styles.markAttendanceButtonText,
+              isAttendanceMarked && styles.markAttendanceButtonTextDisabled
+            ] as any}>
+              {isAttendanceMarked ? "Already Marked" :
+                isRequestPending ? "Pending Approval" :
+                  needsRequest ? "Request Permission" :
+                    "Mark Attendance"}
+            </Text>
+            {isAttendanceMarked && (
+              <View style={styles.successBadge}>
+                <Feather name="check" size={8} color={colors.success} />
+              </View>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
-             style={[styles.unenrollButton, dynamicStyles.unenrollButton]}
-             onPress={() => handleUnenroll(item.id, item.name)}
-             activeOpacity={0.8}
-           >
-              <View style={[styles.buttonIconWrapper, styles.buttonIconWrapperDanger]}>
-                <Feather name="user-minus" size={16} color={colors.danger} />
-              </View>
-              <Text style={[styles.unenrollButtonText, dynamicStyles.unenrollButtonText]}>Unenroll</Text>
-           </TouchableOpacity>
+            style={[styles.unenrollButton, dynamicStyles.unenrollButton]}
+            onPress={() => handleUnenroll(item.id, item.name)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.buttonIconWrapper, styles.buttonIconWrapperDanger]}>
+              <Feather name="user-minus" size={16} color={colors.danger} />
+            </View>
+            <Text style={[styles.unenrollButtonText, dynamicStyles.unenrollButtonText]}>Unenroll</Text>
+          </TouchableOpacity>
         </View>
       </View>
     )
@@ -292,18 +449,18 @@ export function StudentClassesTab() {
   )
 
   const renderEmptyEnrolled = () => (
-    <EmptyState 
-      title="No Enrolled Classes" 
-      message="You are not currently enrolled in any classes. Check the Available tab to enroll in classes." 
-      icon="book" 
+    <EmptyState
+      title="No Enrolled Classes"
+      message="You are not currently enrolled in any classes. Check the Available tab to enroll in classes."
+      icon="book"
     />
   )
 
   const renderEmptyAvailable = () => (
-    <EmptyState 
-      title="No Available Classes" 
-      message="There are no classes available for enrollment at the moment." 
-      icon="search" 
+    <EmptyState
+      title="No Available Classes"
+      message="There are no classes available for enrollment at the moment."
+      icon="search"
     />
   )
 
@@ -362,6 +519,20 @@ export function StudentClassesTab() {
     },
     newClassBadgeText: {
       color: colors.success,
+    },
+    requestStatusBanner: {
+      backgroundColor: isDark ? `${colors.warning}20` : `${colors.warning}15`,
+      borderTopColor: isDark ? `${colors.warning}40` : `${colors.warning}30`,
+    },
+    requestStatusText: {
+      color: colors.warning,
+    },
+    permissionBanner: {
+      backgroundColor: isDark ? `${colors.primary}20` : `${colors.primary}15`,
+      borderTopColor: isDark ? `${colors.primary}40` : `${colors.primary}30`,
+    },
+    permissionText: {
+      color: colors.primary,
     },
     loadingText: {
       fontSize: fonts.sizes.md,
@@ -449,7 +620,7 @@ export function StudentClassesTab() {
           <View style={styles.headerTextContainer}>
             <Text style={dynamicStyles.headerTitle}>My Classes</Text>
             <Text style={dynamicStyles.headerSubtitle}>
-              {activeTab === 'enrolled' 
+              {activeTab === 'enrolled'
                 ? `Manage your ${enrolledClasses.length} enrolled ${enrolledClasses.length === 1 ? 'class' : 'classes'}`
                 : `Discover ${getAvailableForEnrollment().length} available ${getAvailableForEnrollment().length === 1 ? 'class' : 'classes'}`
               }
@@ -474,10 +645,10 @@ export function StudentClassesTab() {
           activeOpacity={0.7}
         >
           <View style={styles.tabContent}>
-            <Feather 
-              name="book-open" 
-              size={16} 
-              color={activeTab === 'enrolled' ? colors.card : themeColors.textLight} 
+            <Feather
+              name="book-open"
+              size={16}
+              color={activeTab === 'enrolled' ? colors.card : themeColors.textLight}
               style={styles.tabIcon}
             />
             <Text style={[dynamicStyles.tabText, activeTab === 'enrolled' && dynamicStyles.activeTabText]}>
@@ -498,10 +669,10 @@ export function StudentClassesTab() {
           activeOpacity={0.7}
         >
           <View style={styles.tabContent}>
-            <Feather 
-              name="plus-circle" 
-              size={16} 
-              color={activeTab === 'available' ? colors.card : themeColors.textLight} 
+            <Feather
+              name="plus-circle"
+              size={16}
+              color={activeTab === 'available' ? colors.card : themeColors.textLight}
               style={styles.tabIcon}
             />
             <Text style={[dynamicStyles.tabText, activeTab === 'available' && dynamicStyles.activeTabText]}>
@@ -681,6 +852,34 @@ const styles = StyleSheet.create({
     fontWeight: fonts.weights.semibold as any,
     marginLeft: spacing.xs / 2,
   },
+  requestStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+  },
+  requestStatusText: {
+    fontSize: fonts.sizes.xs,
+    fontFamily: fonts.regular,
+    fontWeight: fonts.weights.semibold as any,
+    marginLeft: spacing.xs / 2,
+  },
+  permissionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+  },
+  permissionText: {
+    fontSize: fonts.sizes.xs,
+    fontFamily: fonts.regular,
+    fontWeight: fonts.weights.semibold as any,
+    marginLeft: spacing.xs / 2,
+  },
   newClassBadge: {
     position: 'absolute',
     top: spacing.md,
@@ -734,6 +933,14 @@ const styles = StyleSheet.create({
   markAttendanceButtonTextDisabled: {
     color: colors.card,
   },
+  markAttendanceButtonPending: {
+    backgroundColor: colors.warning,
+    borderColor: `${colors.warning}40`,
+  },
+  markAttendanceButtonRequest: {
+    backgroundColor: colors.primary,
+    borderColor: `${colors.primary}40`,
+  },
   buttonIconWrapper: {
     width: 24,
     height: 24,
@@ -745,6 +952,9 @@ const styles = StyleSheet.create({
   },
   buttonIconWrapperSuccess: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  buttonIconWrapperWarning: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   buttonIconWrapperDanger: {
     backgroundColor: `${colors.danger}15`,

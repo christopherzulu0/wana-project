@@ -28,7 +28,7 @@ const darkColors = {
   borderLight: "#252829",
 }
 
-const API_BASE_URL = 'http://10.156.181.203:3000'
+const API_BASE_URL = 'https://attendance-records-wana.vercel.app'
 
 // Skeleton Loading Component
 const SkeletonBox = ({ width, height, style, themeColors }: { width?: number | string; height?: number; style?: any; themeColors?: any }) => (
